@@ -1,137 +1,70 @@
+:root {
+    --bg: #f4f1ea;
+    --panel: #ffffff;
+    --text: #222;
+    --muted: #6b6b6b;
+    --border: #ddd6c8;
+    --accent: #2e7d4f;
+    --button: #ece7dc;
+    color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1b1a18;
+        --panel: #262421;
+        --text: #e8e4dc;
+        --muted: #a39d92;
+        --border: #3b3833;
+        --accent: #4cb276;
+        --button: #34312c;
+        color-scheme: dark;
+    }
+}
+
+* { box-sizing: border-box; }
+
 body {
-    background: url(resources/bg.gif) repeat top left;
-
-    height: 150vh;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-body > h1 {
-	text-align: center;
 
-	background-color: rgba(256,256,256,.85);
+a { color: var(--accent); }
 
-    margin-left: auto;
-    margin-right: auto;
-    padding: .5em;
-    border-radius: .1em;
+header, main {
+    width: min(720px, 100% - 2rem);
+    margin: 0 auto;
 }
-#content {
-	background-color: white;
-	padding:1em;
-	border-radius: .25em;
-
+header {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    margin-left: auto;
-    margin-right: auto;
+    gap: 1rem;
+    padding: 1rem 0;
 }
-h1, #content, #content > div {
-    width: max(600px, 50vw);
-}
+h1 { margin: 0; }
 
 #back-button {
-	position: fixed;
-	top: .5em;
-	left: .5em;
-
-	background-color: lightgrey;
-	color: white;
-
-	text-decoration: none;
-
-	padding-left: .5em;
-	padding-right: .5em;
-	padding-top: .25em;
-	padding-bottom: .25em;
-	border-radius: .5em;
-}
-#back-button:hover {
-	background-color: darkgrey;
+    background: var(--button);
+    border: 1px solid var(--border);
+    color: var(--text);
+    text-decoration: none;
+    padding: .25em .8em;
+    border-radius: 6px;
 }
 
-/* Profile Card Styles */
+section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .5rem 1.5rem 1rem;
+    margin-bottom: 1rem;
+}
+h3 { margin-bottom: .2em; }
 
-.profileCard {
-    width: 600px;
-    border: 1px solid black;
-    margin: 0 auto;
-    background: #fff;
-}
-    
-.img-container {
-    height: 200px;
-    border-bottom: 1px solid black;
-    background-size: cover;
-    background-position: center center;
-    background-repeat: no-repeat;
-    position: relative;
-    background-image: skyblue;
-}
-    
-.profile-img {
-    width: 100px;
-    height: 100px;
-    position: absolute;
-    left: 10px;
-    top: 150px;
-    display: inline-block;
-    border-radius: 50%;
-    border: 4px solid #fff;
-}
-    
-.profileCard .profile-name {
-    padding: 10px;
-}
-    
-.profileCard .profile-name p {
-    font-size: 18px;
-    position: relative;
-    top: 40px;
-}
-    
-.profileCard .profile-name .twitter-handle {
-    font-size: 15px;
-    color: rgb(90, 90, 90);
-}
-    
-.profileCard .profile-bio {
-    padding: 10px;
-    position: relative;
-    top: 35px;
-    font-size: 15px;
-}
-    
-.profileCard .location-and-url {
-    font-size: 15px;
-    color: rgb(90, 90, 90);
-    padding: 40px 10px 10px 10px;
-}
-    
-.profileCard .follow-count {
-    font-size: 15px;
-    color: rgb(90, 90, 90);
-    padding: 10px;
-}
-    
-.count {
-    font-weight: bold;
-    color: black;
-    padding-right: 2px;
-}
-    
-.following,
-.followers {
-    display: inline-block;
-    padding-right: 8px;
-}
-    
-.location,
-.url {
-    display: inline-block;
-}
-
-.name {
-    margin-bottom: 0;
-}
-.profile-bio, .location-and-url, .twitter-handle, .follow-count {
-    margin: 0;
+kbd {
+    font: .85em ui-monospace, monospace;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 .3em;
 }
