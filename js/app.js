@@ -661,6 +661,7 @@ function render() {
 
     renderProblemBar()
     renderReviewStatus()
+    updateUrl(entry)
     renderPathChoices()
     renderMoveInfo(entry)
     renderFollowUps(entry)
@@ -1165,6 +1166,7 @@ function bindControls() {
             renderReviewStatus() // Due reviews depend on the enabled types
         })
     }
+    $('#copy-link').addEventListener('click', copyLink)
     $('#show-answer').addEventListener('click', revealAnswer)
     $('#next-problem').addEventListener('click', () => newProblem())
     // Reviews become due over time, so keep the counts fresh
@@ -1228,6 +1230,63 @@ function begin() {
     }
 }
 
+// --- Shareable links -------------------------------------------------------------
+// In Explore mode the URL's hash holds the moves to the current position (#path=pdqfnc), so the
+// address can be bookmarked or shared. Problem modes leave it out, as it could give answers away.
+
+const PATH_HASH = /^#path=((?:[a-t]{2})+)$/
+
+function updateUrl(entry) {
+    $('#copy-link').disabled = !entry.path
+    const hash = settings.mode === 'explore' && entry.path ? `#path=${entry.path}` : ''
+    if (location.hash !== hash) { // window.history: `history` here is the game's move list
+        window.history.replaceState(null, '', hash || location.pathname + location.search)
+    }
+}
+
+const shareUrl = () => `${location.origin}${location.pathname}#path=${currentEntry().path}`
+
+async function copyLink() {
+    const url = shareUrl()
+    try {
+        await navigator.clipboard.writeText(url)
+        toast('Link to this position copied.', 'success')
+    }
+    catch {
+        prompt('Copy this link to share the position:', url) // Clipboard unavailable
+    }
+}
+
+/**
+ * If the URL holds a shared position, opens it in Explore mode, playing whoever's turn it is
+ * (so the computer doesn't move away from it straight away). Returns true if it did.
+ */
+function openSharedPosition() {
+    const match = PATH_HASH.exec(location.hash)
+    if (!match) { return false }
+    let position
+    try { position = splitPath(match[1]).reduce((p, move) => p.playSgf(move), new Position()) }
+    catch { return false } // Not a legal sequence
+
+    const previousPlayer = settings.player
+    settings.mode = 'explore'
+    settings.player = colorName(position.toPlay)
+    saveSettings()
+    document.querySelectorAll('input[name="mode"]').forEach((input) => { input.checked = input.value === 'explore' })
+    document.querySelectorAll('input[name="player"]').forEach((input) => { input.checked = input.value === settings.player })
+    document.querySelectorAll('input[name="start"]').forEach((input) => { input.checked = false })
+    applyMode()
+    startGame(match[1])
+    // Reloading the page lands here too, so only speak up if the player's color changed
+    if (settings.player !== previousPlayer) { toast(`You’re playing ${capitalize(settings.player)}, whose turn it is in this position.`) }
+    return true
+}
+
+window.addEventListener('hashchange', () => {
+    // Our own updates use replaceState, which doesn't fire this; it's a pasted or edited link
+    if (PATH_HASH.test(location.hash) && location.hash.slice(6) !== currentEntry()?.path) { openSharedPosition() }
+})
+
 buildStartingPoints()
 bindControls()
-begin()
+if (!openSharedPosition()) { begin() } // A shared link (or a reload in Explore) opens its position
