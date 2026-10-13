@@ -704,11 +704,15 @@ function render() {
         if (['path', 'better', 'tenuki'].includes(problem.kind)) {
             highlights = [] // The answer is marked among the choices instead
         }
+        if (problem.inferredFrom) { highlights = [toHighlight(problem.inferredFrom, MoveType.IDEAL)] }
         else {
             const hasIdeal = [...problem.answers.values()].includes(MoveType.IDEAL)
             const accepted = problem.kind === 'next' || !hasIdeal ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
             highlights = [...problem.answers].filter(([, type]) => accepted.includes(type)).map(([move, type]) => toHighlight(move, type))
         }
+    }
+    else if (problem?.kind === 'tenuki' && problem.solved && problem.inferredFrom && current === problem.index) {
+        highlights = [toHighlight(problem.inferredFrom, MoveType.IDEAL)] // The local move the joseki continues with
     }
     else if (settings.showMoves && entry.node?.children && !problemPending()) {
         highlights = entry.node.children
@@ -802,6 +806,9 @@ function answerExplanation() {
     if (node?.labels.includes(TENUKI_LABEL[color])) { reasons.push(`Josekipedia notes that ${side} can tenuki here.`) }
     if (pass && MOVE_TYPE_NAMES[pass.type]) { reasons.push(`Tenuki is recorded as ${pass.type === MoveType.IDEAL ? 'an' : 'a'} ${MOVE_TYPE_NAMES[pass.type]} move here.`) }
     if (node?.children?.some((child) => child.color === color && child.labels.includes(15))) { reasons.push(`${side}’s next move here is marked “Necessary”.`) }
+    if (problem.inferredFrom) {
+        reasons.push(`Josekipedia doesn’t mark tenuki as playable here, and the joseki continues locally with ${side}’s ${sgfToDisplay(problem.inferredFrom)} (marked on the board).`)
+    }
     const parts = [reasons.join(' ')]
     const comment = pass && cleanText(pass.comment)
     if (comment) {

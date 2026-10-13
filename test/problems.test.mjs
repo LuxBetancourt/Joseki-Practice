@@ -281,6 +281,25 @@ test('tenuki-able: the evidence rules', () => {
     assert.equal(tenukiVerdict(node([{ move: 'qd', color: BLACK, type: 0, labels: [15] }]), BLACK), 'no', 'a Necessary move')
 })
 
+test('tenuki-able: infers "no" when nothing allows tenuki and the joseki carries on locally', async () => {
+    // pathTree: after pd qf nc qc, black qd, white pc, black od; no tenuki evidence anywhere
+    const getNode = treeGetter(pathTree())
+    const problem = await generateTenuki({ startMoves: START, firstTen: true, getNode, random: sequence([0.7]) })
+    assert.equal(problem.answer, 'no')
+    assert.ok(problem.inferredFrom, 'says which local move it inferred from')
+    // The inferred move is the side to play's joseki move, and the sequence carries on after it
+    const line = ['qd', 'pc', 'od']
+    const index = problem.moves.length - START.length
+    assert.equal(problem.inferredFrom, line[index])
+    assert.ok(index < line.length - 1, 'not the last move of the line')
+})
+
+test('tenuki-able: an inferred "no" needs the sequence to carry on', async () => {
+    const tree = pathTree({ 45: [] }) // after qd the line stops
+    const problem = await generateTenuki({ startMoves: START, firstTen: true, getNode: treeGetter(tree), random: sequence([0.7]) })
+    assert.equal(problem, null)
+})
+
 test('tenuki-able: finds a position with the chosen answer', async () => {
     const tree = pathTree({
         44: [{ id: 45, move: 'qd', color: B, type: 0 }, { id: 96, move: 'tt', color: B, type: 2 }], // tenuki is bad here

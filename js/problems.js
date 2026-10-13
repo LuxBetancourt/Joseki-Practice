@@ -260,7 +260,7 @@ export function problemData(kind, problem) {
         case 'shape': return { answer: problem.answer, line: problem.line }
         case 'path': return { line: problem.line, options: problem.options.map(({ line, mistake }) => ({ line, mistake })) }
         case 'better': return { answer: problem.answer, labels: problem.labels }
-        case 'tenuki': return { answer: problem.answer }
+        case 'tenuki': return { answer: problem.answer, inferredFrom: problem.inferredFrom }
         default: return {}
     }
 }
@@ -288,7 +288,7 @@ export async function rebuildProblem({ kind, moves, color, data }, { getNode, ra
         case 'better':
             return { moves, answers, answer: data.answer, labels: data.labels }
         case 'tenuki':
-            return { moves, answers, answer: data.answer }
+            return { moves, answers, answer: data.answer, inferredFrom: data.inferredFrom }
         default:
             return { moves, answers }
     }
@@ -348,24 +348,63 @@ export function tenukiVerdict(node, color) {
     return yes ? 'yes' : 'no'
 }
 
+const SETTLED_LABEL = 23
+const MAX_INFERRED_CHECKED = 4
+// "No" is found on almost every walk (inferred, if not recorded) but "yes" on under half, so aim
+// for "yes" more often to make the problems players actually see come out about even
+const AIM_FOR_YES = 0.68
+
 /**
- * "Tenuki-able?" problem: a position where Josekipedia says whether the side to play can play
- * elsewhere. It asks about whoever's turn it is (the player doesn't place stones here), which
- * doubles the positions available. Yes and no are chosen evenly first, as "no" is much rarer in
- * the data; returns null if this walk doesn't find the chosen answer.
- * Returns { moves, answer, color } (the side being asked about) or null.
+ * The joseki move that would make a position an inferred "no" for `color`, or null. Josekipedia
+ * rarely says outright that tenuki is wrong, so "no" is also inferred (more weakly) when nothing
+ * marks tenuki as playable, the position isn't settled, and the main line continues with this
+ * player's local move. The caller also checks the sequence carries on after that move.
+ */
+function inferredNoMove(node, color) {
+    if (tenukiVerdict(node, color) !== null || node.labels.includes(SETTLED_LABEL)) { return null }
+    if (node.children.some((child) => child.move === PASS && child.color === color)) { return null } // Tenuki is recorded, as neither joseki nor bad
+    return node.children.find((child) => child.color === color && child.type === MoveType.IDEAL && child.move !== PASS) || null
+}
+
+/**
+ * "Tenuki-able?" problem: a position where the side to play can or can't play elsewhere. It asks
+ * about whoever's turn it is (the player doesn't place stones here), which doubles the positions
+ * available. The answer is chosen first (see AIM_FOR_YES). Recorded evidence (tenukiVerdict) is preferred;
+ * failing that, "no" is inferred from the joseki carrying on locally (see inferredNoMove).
+ * Returns { moves, answer, color, inferredFrom? } (the side asked about, and for an inferred "no"
+ * the local move the joseki continues with) or null.
  */
 export async function generateTenuki({ startMoves, firstTen, getNode, random = Math.random }) {
-    const want = random() < 0.5 ? 'yes' : 'no'
-    const found = []
+    const want = random() < AIM_FOR_YES ? 'yes' : 'no'
+    const recorded = []
+    const inferred = []
     await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
-        const suitable = state.moves.length >= MIN_MOVES && tenukiVerdict(state.node, state.position.toPlay) === want
-        if (suitable) { found.push(state) }
-        return suitable
+        if (state.moves.length < MIN_MOVES) { return false }
+        const color = state.position.toPlay
+        if (tenukiVerdict(state.node, color) === want) {
+            recorded.push(state)
+            return true
+        }
+        const move = want === 'no' && inferredNoMove(state.node, color)
+        if (move) { inferred.push({ state, move }) }
+        return false
     })
-    if (!found.length) { return null }
-    const chosen = pick(found, random)
-    return { moves: chosen.moves, answer: want, color: chosen.position.toPlay }
+    if (recorded.length) {
+        const chosen = pick(recorded, random)
+        return { moves: chosen.moves, answer: want, color: chosen.position.toPlay }
+    }
+
+    // An inferred "no" needs the sequence to carry on after the local move: the other side has a
+    // joseki reply, so the exchange isn't finished
+    for (const { state, move } of inferred.reverse().slice(0, MAX_INFERRED_CHECKED)) {
+        const after = await getNode(move.id)
+        const continues = !after.labels.includes(SETTLED_LABEL)
+            && after.children.some((child) => child.color !== move.color && child.type === MoveType.IDEAL && child.move !== PASS)
+        if (continues) {
+            return { moves: state.moves, answer: 'no', color: state.position.toPlay, inferredFrom: move.move }
+        }
+    }
+    return null
 }
 
 /** A saved problem ({ kind, moves, color, data }) as a compact, URL-safe string, for sharing. */
