@@ -371,7 +371,7 @@ const problemPrompt = () => {
     if (problem.kind === 'better') { return 'Who’s better in this position?' }
     if (problem.kind === 'tenuki') {
         const side = capitalize(colorName(problem.spec.color))
-        return `It’s ${side}’s turn. Can ${side} tenuki (play elsewhere) here?`
+        return `It’s ${side}’s turn. Can ${side} tenuki here?`
     }
     const { move, type } = problem.mistake
     const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
