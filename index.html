@@ -56,13 +56,11 @@
         <h2>Starting Point</h2>
         <form id="start-form">
             <ul class="tree" id="starting-points">
-                <li><label><input type="radio" name="start" value="empty" checked> Empty Board</label></li>
+                <li><div class="tree-row"><span class="tree-spacer"></span><label><input type="radio" name="start" value="empty" checked>Empty Board</label></div></li>
                 <li class="practice-only" title="Play both colors freely. The computer won't respond and no joseki info is loaded.">
-                    <label><input type="radio" name="start" value="demo"> Demo Board</label>
+                    <div class="tree-row"><span class="tree-spacer"></span><label><input type="radio" name="start" value="demo">Demo Board</label></div>
                 </li>
             </ul>
-            <h3>Fuseki</h3>
-            <ul class="tree" id="fuseki"></ul>
             <button type="submit" id="start" class="primary">Start</button>
         </form>
     </aside>

@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
     showMoves: false,
     showMoveInfo: true,
     showFollowUps: false,
+    expanded: [], // Starting-point branches the player has expanded
     start: 'empty',
 }
 
@@ -695,25 +696,66 @@ function clearToasts() {
 
 // --- Setup ---------------------------------------------------------------------
 
+/** Builds the collapsible starting-point tree. Fuseki are a group with no position of their own. */
 function buildStartingPoints() {
+    const tree = [...JOSEKI, { name: 'Fuseki', key: 'fuseki', children: FUSEKI }]
+    const contains = (point, path) => point.path === path || (point.children || []).some((child) => contains(child, path))
+
     const makeItems = (points) => points.map((point) => {
         const li = document.createElement('li')
-        const label = document.createElement('label')
-        const input = document.createElement('input')
-        input.type = 'radio'
-        input.name = 'start'
-        input.value = point.path
-        label.append(input, ` ${point.name}`)
-        li.append(label)
-        if (point.children) {
-            const ul = document.createElement('ul')
-            ul.append(...makeItems(point.children))
-            li.append(ul)
+        const row = document.createElement('div')
+        row.className = 'tree-row'
+        li.append(row)
+
+        let name
+        if (point.path) {
+            name = document.createElement('label')
+            const input = document.createElement('input')
+            input.type = 'radio'
+            input.name = 'start'
+            input.value = point.path
+            name.append(input, point.name)
         }
+        else {
+            name = document.createElement('span')
+            name.className = 'tree-group'
+            name.textContent = point.name
+        }
+
+        if (!point.children) {
+            row.append(Object.assign(document.createElement('span'), { className: 'tree-spacer' }), name)
+            return li
+        }
+
+        const key = point.key || point.path
+        const toggle = document.createElement('button')
+        toggle.type = 'button'
+        toggle.className = 'tree-toggle'
+        toggle.setAttribute('aria-label', `Show variations of ${point.name}`)
+        const ul = document.createElement('ul')
+        ul.append(...makeItems(point.children))
+
+        const setExpanded = (expanded) => {
+            toggle.setAttribute('aria-expanded', expanded)
+            ul.hidden = !expanded
+        }
+        // Start collapsed, except branches the player opened before or that hold the selected start
+        setExpanded(settings.expanded.includes(key) || point.children.some((child) => contains(child, settings.start)))
+        const flip = () => {
+            const expanded = ul.hidden
+            setExpanded(expanded)
+            settings.expanded = settings.expanded.filter((k) => k !== key)
+            if (expanded) { settings.expanded.push(key) }
+            saveSettings()
+        }
+        toggle.addEventListener('click', flip)
+        if (!point.path) { name.addEventListener('click', flip) }
+
+        row.append(toggle, name)
+        li.append(ul)
         return li
     })
-    $('#starting-points').append(...makeItems(JOSEKI))
-    $('#fuseki').append(...makeItems(FUSEKI))
+    $('#starting-points').append(...makeItems(tree))
 }
 
 function bindControls() {
