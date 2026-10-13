@@ -1,6 +1,8 @@
 import { Position, IllegalMoveError, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import { generateNextMove, generatePunish } from './problems.js'
+import { mainLine } from './lines.js'
+import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath } from './text.js'
 import { BoardView } from './board-view.js'
 import { JOSEKI, FUSEKI, CLASSIC_OPENINGS } from './starting-points.js'
@@ -18,6 +20,7 @@ const DEFAULT_SETTINGS = {
     onlyPassIfJoseki: false,
     showMoves: false,
     showMoveInfo: true,
+    showResults: false,
     start: 'empty',
 }
 
@@ -408,6 +411,95 @@ function render() {
 
     renderProblemBar()
     renderMoveInfo(entry)
+    renderResults(entry)
+}
+
+// --- Results of each candidate move ------------------------------------------
+
+const lineCache = new Map() // child node id -> Promise<main line result>
+let resultsKey = null
+
+/** The main line after playing `child` from `position`, cached by node. */
+function lineAfter(child, position) {
+    if (!lineCache.has(child.id)) {
+        const promise = getNode(child.id).then((node) =>
+            mainLine({ node, position: position.playSgf(child.move, child.color), getNode }))
+        promise.catch(() => lineCache.delete(child.id))
+        lineCache.set(child.id, promise)
+    }
+    return lineCache.get(child.id)
+}
+
+function renderResults(entry) {
+    const show = settings.showResults && !freePlay && Boolean(entry.node?.children) && !problemPending()
+    $('#results').hidden = !show
+    if (!show) {
+        resultsKey = null
+        return
+    }
+    const key = `${entry.node.id}:${current}:${settings.firstTen}`
+    if (key === resultsKey) { return }
+    resultsKey = key
+
+    const { position } = entry
+    let candidates = entry.node.children.filter((child) => child.color === position.toPlay)
+    if (settings.firstTen) { candidates = candidates.slice(0, 10) }
+    candidates = candidates.filter((child) => {
+        const point = fromSgf(child.move)
+        return (child.type === MoveType.IDEAL || child.type === MoveType.GOOD) && point && position.isLegal(point.x, point.y, child.color)
+    }).slice(0, 6)
+
+    const container = $('#result-cards')
+    container.replaceChildren()
+    if (!candidates.length) {
+        container.textContent = 'No joseki continuations from here.'
+        return
+    }
+    for (const child of candidates) {
+        container.append(resultCard(child, position, key))
+    }
+}
+
+function resultCard(child, position, key) {
+    const card = document.createElement('figure')
+    card.className = 'result-card'
+    const slot = document.createElement('div')
+    slot.className = 'shape-slot'
+    slot.textContent = 'Loading…'
+    const caption = document.createElement('figcaption')
+    const name = document.createElement('strong')
+    name.textContent = sgfToDisplay(child.move)
+    const badge = document.createElement('span')
+    badge.className = `badge ${MOVE_TYPE_NAMES[child.type]}`
+    badge.textContent = MOVE_TYPE_NAMES[child.type]
+    const labels = document.createElement('ul')
+    labels.className = 'result-labels'
+    caption.append(name, ' ', badge, labels)
+    card.append(slot, caption)
+
+    const point = fromSgf(child.move)
+    card.addEventListener('mouseenter', () => view.render({ marks: [point] }))
+    card.addEventListener('mouseleave', () => view.render({ marks: [] }))
+
+    lineAfter(child, position).then((line) => {
+        if (resultsKey !== key) { return }
+        // Number the candidate 1 and the main line after it; later moves on a point win
+        const played = [child, ...line.moves].map(({ move }, i) => ({ ...fromSgf(move), n: i + 1 }))
+        const numbers = new Map(played.map(({ x, y, n }) => [`${x},${y}`, n]))
+        const region = shapeRegion(line.position, localShape(line.position, played))
+        slot.replaceWith(renderShape(line.position, { region, numbers, label: `Result of ${sgfToDisplay(child.move)}` }))
+
+        const texts = line.node.labels.map(labelText).filter(Boolean)
+        labels.replaceChildren(...texts.map((text) => {
+            const li = document.createElement('li')
+            li.textContent = text
+            return li
+        }))
+        card.title = `${line.moves.length + 1} moves`
+    }).catch(() => {
+        if (resultsKey === key) { slot.textContent = 'Couldn’t load.' }
+    })
+    return card
 }
 
 function renderProblemBar() {

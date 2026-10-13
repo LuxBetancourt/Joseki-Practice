@@ -27,6 +27,7 @@ export class BoardView {
 
         const size = SIZE - 1 + 2 * MARGIN
         svg.setAttribute('viewBox', `${-MARGIN} ${-MARGIN} ${size} ${size}`)
+        svg.classList.add('goban')
         svg.replaceChildren()
         this.drawStatic()
         this.highlightLayer = el('g', { class: 'highlights' }, svg)

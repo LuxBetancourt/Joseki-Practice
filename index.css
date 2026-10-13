@@ -128,8 +128,9 @@ kbd {
     margin: 0 auto;
     grid-template-columns: 240px minmax(0, 1fr) 240px;
     grid-template-areas:
-        "setup board options"
-        "setup info  options";
+        "setup board   options"
+        "setup info    options"
+        "setup results options";
     align-items: start;
 }
 #setup { grid-area: setup; }
@@ -141,16 +142,17 @@ kbd {
     #layout {
         grid-template-columns: 1fr 1fr;
         grid-template-areas:
-            "board board"
-            "info  info"
-            "setup options";
+            "board   board"
+            "info    info"
+            "results results"
+            "setup   options";
     }
 }
 @media (max-width: 640px) {
     #layout {
         padding: 0 .5rem 2rem;
         grid-template-columns: 1fr;
-        grid-template-areas: "board" "info" "setup" "options";
+        grid-template-areas: "board" "info" "results" "setup" "options";
     }
     .site-header h1 { font-size: 1.2rem; }
 }
@@ -200,11 +202,11 @@ kbd {
 .hint { color: var(--muted); font-size: .8rem; margin: .4rem 0 0; }
 @media (hover: none) { .hint { display: none; } }
 
-#board .wood { fill: var(--wood); }
-#board .grid { stroke: var(--wood-line); stroke-width: .04; fill: none; }
-#board .grid-edge { stroke: var(--wood-line); stroke-width: .07; fill: none; }
-#board .star { fill: var(--wood-line); }
-#board .coordinates text {
+.goban .wood { fill: var(--wood); }
+.goban .grid { stroke: var(--wood-line); stroke-width: .04; fill: none; }
+.goban .grid-edge { stroke: var(--wood-line); stroke-width: .07; fill: none; }
+.goban .star { fill: var(--wood-line); }
+.goban .coordinates text {
     font-size: .42px;
     font-family: system-ui, sans-serif;
     text-anchor: middle;
@@ -212,27 +214,27 @@ kbd {
     fill: var(--wood-line);
     opacity: .75;
 }
-#board .stone.black { fill: url(#stone-black); }
-#board .stone.white { fill: url(#stone-white); stroke: rgba(0, 0, 0, .35); stroke-width: .025; }
-#board .stone.ghost { opacity: .5; pointer-events: none; }
-#board .last-move { fill: none; stroke-width: .07; }
-#board .last-move.on-black { stroke: #fff; }
-#board .last-move.on-white { stroke: #000; }
-#board .highlight { stroke: rgba(0, 0, 0, .45); stroke-width: .03; opacity: .9; }
-#board .highlight.ideal { fill: var(--ideal); }
-#board .highlight.good { fill: var(--good); }
-#board .highlight.bad { fill: var(--bad); }
-#board .highlight.trick { fill: var(--trick); }
-#board .highlight.question { fill: var(--question); }
-#board .highlight.unknown { fill: var(--unknown); }
-#board .mark {
+.goban .stone.black { fill: url(#stone-black); }
+.goban .stone.white { fill: url(#stone-white); stroke: rgba(0, 0, 0, .35); stroke-width: .025; }
+.goban .stone.ghost { opacity: .5; pointer-events: none; }
+.goban .last-move { fill: none; stroke-width: .07; }
+.goban .last-move.on-black { stroke: #fff; }
+.goban .last-move.on-white { stroke: #000; }
+.goban .highlight { stroke: rgba(0, 0, 0, .45); stroke-width: .03; opacity: .9; }
+.goban .highlight.ideal { fill: var(--ideal); }
+.goban .highlight.good { fill: var(--good); }
+.goban .highlight.bad { fill: var(--bad); }
+.goban .highlight.trick { fill: var(--trick); }
+.goban .highlight.question { fill: var(--question); }
+.goban .highlight.unknown { fill: var(--unknown); }
+.goban .mark {
     fill: none;
     stroke: #e3262b;
     stroke-width: .09;
     animation: pulse 1s ease-in-out infinite alternate;
 }
 @keyframes pulse { from { opacity: 1; } to { opacity: .35; } }
-#board :is(.highlights, .stones, .marks) { pointer-events: none; }
+.goban :is(.highlights, .stones, .marks) { pointer-events: none; }
 
 /* --- Toasts ---------------------------------------------------------------- */
 
@@ -349,3 +351,41 @@ body:not([data-mode="practice"]) .practice-only { display: none; }
 #problem-prompt { flex: 1; font-weight: 600; min-width: 12em; }
 #score { color: var(--muted); font-size: .85rem; }
 #problem-bar button.primary { padding: .3em 1.2em; }
+
+/* --- Results of each move -------------------------------------------------- */
+
+#results { grid-area: results; }
+#results[hidden] { display: none; }
+#results .note { color: var(--muted); font-size: .8rem; }
+#result-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: .75rem;
+    margin-top: .75rem;
+}
+.result-card {
+    margin: 0;
+    padding: .4rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+}
+.result-card:hover { border-color: var(--accent); }
+.result-card svg, .shape-slot {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 4px;
+}
+.shape-slot { display: grid; place-items: center; color: var(--muted); font-size: .85rem; background: var(--button); }
+.result-card figcaption { margin-top: .35rem; font-size: .85rem; }
+.result-labels { list-style: none; margin: .2rem 0 0; padding: 0; color: var(--muted); font-size: .78rem; }
+.goban .move-number {
+    font-size: .52px;
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+.goban .move-number.on-black { fill: #fff; }
+.goban .move-number.on-white { fill: #000; }

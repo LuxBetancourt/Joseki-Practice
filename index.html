@@ -89,6 +89,9 @@
         <ul class="plain">
             <li><label><input type="checkbox" data-setting="showMoves"> Show joseki moves <kbd>H</kbd></label></li>
             <li><label><input type="checkbox" data-setting="showMoveInfo"> Show move info</label></li>
+            <li title="Shows the final shape each joseki move leads to. Loads several lines from Josekipedia per position.">
+                <label><input type="checkbox" data-setting="showResults"> Show where moves lead</label>
+            </li>
         </ul>
     </aside>
 
@@ -99,6 +102,14 @@
         </div>
         <div id="move-meta"></div>
         <div id="move-comment"></div>
+    </section>
+
+    <section id="results" class="panel" hidden>
+        <div class="move-info-header">
+            <h2>Where Each Move Leads</h2>
+            <span class="note">Main line of each joseki move, numbered from the move</span>
+        </div>
+        <div id="result-cards"></div>
     </section>
 </main>
 </body>
