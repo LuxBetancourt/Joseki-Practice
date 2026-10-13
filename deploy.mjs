@@ -11,7 +11,7 @@ const API = 'https://neocities.org/api'
 const dryRun = process.argv.includes('--dry-run')
 
 // Files from the old version of the site that no longer exist. Only these are ever deleted.
-const OBSOLETE = ['index.js', 'profile_fetcher.js', 'resources/bg.gif']
+const OBSOLETE = ['index.js', 'profile_fetcher.js']
 
 async function siteFiles() {
     const files = ['index.html', 'about.html', 'reviews.html', 'index.css', 'about.css', 'reviews.css']
