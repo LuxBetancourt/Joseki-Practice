@@ -833,7 +833,7 @@ function renderReviewStatus() {
     const dueCount = deck.due().length
     $('label[for="mode-review"]').textContent = dueCount ? `Review (${dueCount})` : 'Review'
     $('#review-summary').textContent = !deck.size
-        ? 'Problems you miss in Problems mode are saved here for review.'
+        ? 'Missed problems are saved here for review.'
         : `${deck.size} saved · ${dueCount ? `${dueCount} due now` : `next due ${relativeTime(deck.nextDue())}`}`
     $('#clear-reviews').hidden = !deck.size
 }
@@ -842,7 +842,7 @@ function reviewEmptyPrompt() {
     const dueCount = deck.due().length
     if (dueCount) { return `${dueCount} review${dueCount === 1 ? ' is' : 's are'} due. Press Next to start.` }
     if (deck.size) { return `All caught up! The next review is due ${relativeTime(deck.nextDue())}.` }
-    return 'No saved reviews yet. Problems you miss in Problems mode come back here.'
+    return 'No saved reviews yet. Missed problems will come back here.'
 }
 
 function renderMoveInfo(entry) {
