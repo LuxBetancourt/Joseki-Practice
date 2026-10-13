@@ -24,7 +24,7 @@ npm test       # rules and text-handling tests (node:test)
 
 Josekipedia doesn't allow cross-origin requests, so the site needs a proxy that serves
 `/api/node/{id}`. `proxy/cloudflare-worker.js` is one (with edge caching) — see the comment at
-its top for deploy steps, then point `NODE_URL` in `js/config.js` at it.
+its top for deploy steps, then point `PRODUCTION_NODE_URL` in `js/config.js` at it.
 
 The live site is on Neocities (static hosting only), so the proxy runs as a Cloudflare Worker:
 
