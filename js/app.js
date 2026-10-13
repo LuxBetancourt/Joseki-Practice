@@ -5,7 +5,7 @@ import {
     problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem,
 } from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
-import { orderKinds, addRecentKind } from './problem-mix.js'
+import { orderKinds, addRecentKind, seenKey, addSeen } from './problem-mix.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath, cleanText } from './text.js'
@@ -64,18 +64,27 @@ function saveSettings() {
 
 // The types of the last few problems (oldest first), so types that haven't come up lately can be
 // favored (see problem-mix.js). Kept across visits, as a session is often only a few problems.
-let recentKinds = (() => {
+// The problems seen lately (see problem-mix.js) are kept the same way.
+const loadList = (key) => {
     try {
-        const saved = JSON.parse(localStorage.getItem('recentKinds'))
-        return Array.isArray(saved) ? saved.filter((kind) => typeof kind === 'string') : []
+        const saved = JSON.parse(localStorage.getItem(key))
+        return Array.isArray(saved) ? saved.filter((item) => typeof item === 'string') : []
     }
     catch { return [] }
-})()
-
-function noteRecentKind(kind) {
-    recentKinds = addRecentKind(recentKinds, kind)
-    try { localStorage.setItem('recentKinds', JSON.stringify(recentKinds)) }
+}
+const saveList = (key, list) => {
+    try { localStorage.setItem(key, JSON.stringify(list)) }
     catch { /* storage unavailable */ }
+}
+let recentKinds = loadList('recentKinds')
+let seenProblems = new Set(loadList('seenProblems'))
+
+function noteShown(kind, moves) {
+    recentKinds = addRecentKind(recentKinds, kind)
+    saveList('recentKinds', recentKinds)
+    const seen = addSeen([...seenProblems], seenKey(kind, moves))
+    seenProblems = new Set(seen)
+    saveList('seenProblems', seen)
 }
 
 const settings = loadSettings()
@@ -455,13 +464,18 @@ async function newProblem() {
         // haven't come up lately go first (see problem-mix.js). Each gets a few walks before moving
         // on to the next, as some types fail far more often than others and would otherwise hand
         // their turns to the reliable ones
+        // A problem seen lately is only used if nothing new turns up
         const kinds = enabledProblemTypes()
         const order = orderKinds(kinds, recentKinds)
+        let repeat = null
         for (let attempt = 0; attempt < TRIES_PER_TYPE * 4 && !found && gen === generation; ++attempt) {
             kind = order[Math.floor(attempt / TRIES_PER_TYPE) % order.length]
-            found = await GENERATORS[kind](options)
+            const candidate = await GENERATORS[kind](options)
+            if (candidate && seenProblems.has(seenKey(kind, candidate.moves))) { repeat ??= { candidate, kind } }
+            else { found = candidate }
         }
         if (gen !== generation) { return }
+        if (!found && repeat) { ({ candidate: found, kind } = repeat) }
         if (!found) {
             // Show the starting point rather than leaving the last problem on the board
             setupPosition(options.startMoves)
@@ -492,7 +506,7 @@ function presentProblem(found, kind, { reviewKey = null, color = humanColor(), l
         reviewKey,
         link, // Opened from a link: keep it, as rebuilding can reorder Pick the Path's sequences
     }
-    noteRecentKind(kind) // Reviews and links count too: they're practice of that type all the same
+    noteShown(kind, found.moves) // Reviews and links count too: they're practice of that type all the same
     ++generation
     advance()
 }

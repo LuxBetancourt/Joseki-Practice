@@ -33,3 +33,16 @@ export function orderKinds(kinds, recent, random = Math.random) {
 export function addRecentKind(recent, kind) {
     return [...recent, kind].slice(-RECENT_KINDS_KEPT)
 }
+
+// Problems seen lately, so a new problem can skip them: some positions are much easier for the
+// random walks to reach than others, and would otherwise keep coming back
+
+export const SEEN_KEPT = 300
+
+/** Identifies a problem by its type and position (Pick the Path's shuffled sequences don't matter). */
+export const seenKey = (kind, moves) => `${kind}:${moves.join('')}`
+
+/** `seen` with `key` added (moved to the end if it was already there), keeping the last SEEN_KEPT. */
+export function addSeen(seen, key) {
+    return [...seen.filter((k) => k !== key), key].slice(-SEEN_KEPT)
+}

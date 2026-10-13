@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { kindWeight, orderKinds, addRecentKind, RECENT_KINDS_KEPT } from '../js/problem-mix.js'
+import { kindWeight, orderKinds, addRecentKind, RECENT_KINDS_KEPT, seenKey, addSeen, SEEN_KEPT } from '../js/problem-mix.js'
 
 test('a type gets more weight the longer since it came up', () => {
     const recent = ['next', 'shape', 'better', 'better', 'tenuki']
@@ -51,4 +51,14 @@ test('the recent list keeps only the last few', () => {
     for (let i = 0; i < 50; i++) { recent = addRecentKind(recent, i % 2 ? 'next' : 'shape') }
     assert.equal(recent.length, RECENT_KINDS_KEPT)
     assert.equal(recent.at(-1), 'next')
+})
+
+test('seen problems: keyed by type and position, newest last, and only the last few kept', () => {
+    assert.equal(seenKey('next', ['pd', 'qf']), 'next:pdqf')
+    assert.notEqual(seenKey('next', ['pd', 'qf']), seenKey('shape', ['pd', 'qf']))
+    let seen = addSeen(addSeen([], 'a'), 'b')
+    assert.deepEqual(addSeen(seen, 'a'), ['b', 'a'], 'seeing one again moves it to the end')
+    for (let i = 0; i < SEEN_KEPT + 20; i++) { seen = addSeen(seen, `p${i}`) }
+    assert.equal(seen.length, SEEN_KEPT)
+    assert.ok(!seen.includes('a'))
 })
