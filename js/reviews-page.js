@@ -26,9 +26,14 @@ function startPosition(item) {
 function render() {
     const now = Date.now()
     const dueCount = deck.items.filter((item) => item.due <= now).length
-    $('#reviews-summary').textContent = deck.size
-        ? `${deck.size} saved · ${dueCount ? `${dueCount} due now` : `next due ${relativeTime(deck.nextDue())}`}`
-        : 'No saved reviews. Problems you miss are saved here.'
+    const summary = $('#reviews-summary')
+    if (deck.size) {
+        summary.textContent = `${deck.size} saved · ${dueCount ? `${dueCount} due now` : `next due ${relativeTime(deck.nextDue())}`}`
+    }
+    else {
+        const back = Object.assign(document.createElement('a'), { href: 'index.html', textContent: 'Back to the board' })
+        summary.replaceChildren('No saved reviews. Problems you miss are saved here. ', back)
+    }
     $('#remove-all').hidden = !deck.size
 
     const list = $('#review-list')

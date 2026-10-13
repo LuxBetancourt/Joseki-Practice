@@ -1,6 +1,23 @@
 /* Saved Reviews page. Shares colors, buttons, panels and board styles with index.css. */
 
-.header-spacer { width: 2rem; }
+.reviews-header {
+    width: min(960px, 100% - 2rem);
+    margin: 0 auto;
+    padding: 1rem 0;
+    justify-content: flex-start;
+    gap: 1rem;
+}
+.back-button {
+    display: inline-block;
+    padding: .5em 1em;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--button);
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 600;
+}
+.back-button:hover { background: var(--button-hover); }
 
 #reviews-page {
     width: min(960px, 100% - 2rem);
