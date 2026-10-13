@@ -18,7 +18,7 @@ const $ = (selector) => document.querySelector(selector)
 // --- Settings ------------------------------------------------------------------
 
 const DEFAULT_SETTINGS = {
-    mode: 'explore', // 'explore' | 'problems'
+    mode: 'problems', // 'explore' | 'problems' | 'review'
     problemTypes: { next: true, punish: true, shape: true, path: true, better: true, tenuki: true },
     player: 'black',
     ideal: true, good: false, bad: false, trick: false, question: false,
@@ -1422,14 +1422,16 @@ function bindControls() {
 
     for (const input of document.querySelectorAll('input[name="mode"]')) {
         input.checked = input.value === settings.mode
-        input.addEventListener('change', () => {
-            settings.mode = input.value
-            saveSettings()
-            applyMode()
-            begin()
-        })
+        input.addEventListener('change', () => switchMode(input.value))
     }
     applyMode()
+
+    // The title starts a new problem (it's still a link, so it can be opened in a new tab)
+    $('#home-link').addEventListener('click', (event) => {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) { return }
+        event.preventDefault()
+        switchMode('problems')
+    })
 
     for (const input of document.querySelectorAll('[data-problem-type]')) {
         const kind = input.dataset.problemType
@@ -1496,6 +1498,15 @@ function applyMode() {
         settings.start = 'empty'
         saveSettings()
     }
+}
+
+/** Changes mode (updating the mode buttons) and starts afresh in it. */
+function switchMode(mode) {
+    settings.mode = mode
+    saveSettings()
+    document.querySelectorAll('input[name="mode"]').forEach((input) => { input.checked = input.value === mode })
+    applyMode()
+    begin()
 }
 
 /** Starts a game against the computer or a problem, depending on the mode. */
@@ -1625,7 +1636,12 @@ window.addEventListener('hashchange', () => {
     else if (PROBLEM_HASH.test(location.hash) && location.hash.slice(9) !== problem?.link) { openSharedProblem() }
 })
 
+// The app opens in Problems mode, unless a link (or a reload) says otherwise
+if (!PATH_HASH.test(location.hash) && !PROBLEM_HASH.test(location.hash)) {
+    settings.mode = 'problems'
+    saveSettings()
+}
 buildStartingPoints()
 bindControls()
-// A shared link (or a reload in Explore) opens its position or problem
+// A shared link (or a reload) opens its position or problem
 if (!openSharedPosition() && !openSharedProblem()) { begin() }
