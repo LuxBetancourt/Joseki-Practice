@@ -12,6 +12,16 @@ const DAY = 24 * HOUR
 export const REVIEW_STEPS = [0, HOUR, DAY, 7 * DAY, 30 * DAY, 365 * DAY]
 export const RELEARN_DELAY = 5 * MINUTE
 
+/** "in 5 minutes", "in 3 hours", "in 2 days"… for a future timestamp. */
+export function relativeTime(time, now = Date.now()) {
+    const minutes = Math.max(1, Math.round((time - now) / MINUTE))
+    const [amount, unit] = minutes < 60 ? [minutes, 'minute']
+        : minutes < 48 * 60 ? [Math.round(minutes / 60), 'hour']
+            : minutes < 60 * 24 * 60 ? [Math.round(minutes / (24 * 60)), 'day']
+                : [Math.round(minutes / (30 * 24 * 60)), 'month']
+    return `in ${amount} ${unit}${amount === 1 ? '' : 's'}`
+}
+
 /** Identifies the same problem across sessions: the kind and position (and target, for shapes). */
 export const reviewKey = ({ kind, moves, data }) => [kind, moves.join(''), data?.answer || ''].join(':')
 
@@ -66,6 +76,14 @@ export class ReviewDeck {
 
     clear() {
         this.items = []
+        this.save()
+    }
+
+    /** Puts back items that were removed (for undo), keeping any that are already there. */
+    restore(items) {
+        for (const item of items) {
+            if (!this.find(item.key)) { this.items.push(item) }
+        }
         this.save()
     }
 

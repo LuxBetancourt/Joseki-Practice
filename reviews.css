@@ -1,0 +1,41 @@
+/* Saved Reviews page. Shares colors, buttons, panels and board styles with index.css. */
+
+.header-spacer { width: 2rem; }
+
+#reviews-page {
+    width: min(960px, 100% - 2rem);
+    margin: 0 auto 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.reviews-toolbar, .undo-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .6rem 1rem;
+}
+.reviews-toolbar p { margin: 0; }
+#remove-all[hidden], .undo-bar[hidden] { display: none; }
+
+#review-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: .75rem;
+}
+.review-card { padding: .6rem; }
+.review-card svg { display: block; width: 100%; aspect-ratio: 1; border-radius: 4px; }
+.review-card h2 {
+    margin: .5rem 0 .2rem;
+    font-size: .95rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text);
+}
+.review-details { margin: 0 0 .4rem; color: var(--muted); font-size: .85rem; }
+.goban .ring.last { stroke: var(--mark); }

@@ -19,6 +19,23 @@ function markShape(shape, x, y, className) {
     return `<circle class="${className}" cx="${x}" cy="${y}" r="0.25"/>`
 }
 
+/**
+ * Defines the stone gradients once, in a tiny SVG of their own. Every board (main and small)
+ * refers to them by id, and gradients inside a hidden SVG don't render, so they can't live in
+ * any one board.
+ */
+export function ensureStoneGradients() {
+    if (document.getElementById('stone-gradients')) { return }
+    const svg = el('svg', { id: 'stone-gradients', width: 0, height: 0, 'aria-hidden': 'true', style: 'position: absolute' })
+    const defs = el('defs', {}, svg)
+    for (const [id, inner, outer] of [['stone-black', '#5a5a5a', '#101010'], ['stone-white', '#ffffff', '#d4d4d4']]) {
+        const gradient = el('radialGradient', { id, cx: '35%', cy: '35%', r: '70%' }, defs)
+        el('stop', { offset: '0%', 'stop-color': inner }, gradient)
+        el('stop', { offset: '100%', 'stop-color': outer }, gradient)
+    }
+    document.body.prepend(svg)
+}
+
 function el(name, attrs = {}, parent) {
     const node = document.createElementNS(NS, name)
     for (const [key, value] of Object.entries(attrs)) { node.setAttribute(key, value) }
@@ -63,12 +80,7 @@ export class BoardView {
 
     drawStatic() {
         const max = SIZE - 1
-        const defs = el('defs', {}, this.svg)
-        for (const [id, inner, outer] of [['stone-black', '#5a5a5a', '#101010'], ['stone-white', '#ffffff', '#d4d4d4']]) {
-            const gradient = el('radialGradient', { id, cx: '35%', cy: '35%', r: '70%' }, defs)
-            el('stop', { offset: '0%', 'stop-color': inner }, gradient)
-            el('stop', { offset: '100%', 'stop-color': outer }, gradient)
-        }
+        ensureStoneGradients()
         el('rect', { class: 'wood', x: -MARGIN, y: -MARGIN, width: max + 2 * MARGIN, height: max + 2 * MARGIN, rx: 0.3 }, this.svg)
 
         let d = ''

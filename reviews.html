@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saved Reviews · Joseki Practice</title>
+    <link rel="icon" href="resources/favicon.ico">
+    <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="reviews.css">
+    <script type="module" src="js/reviews-page.js"></script>
+</head>
+<body>
+<header class="site-header">
+    <a class="icon-link" href="index.html" title="Back to the board" aria-label="Back to the board">←</a>
+    <h1>Saved Reviews</h1>
+    <span class="header-spacer"></span>
+</header>
+
+<main id="reviews-page">
+    <div class="panel reviews-toolbar">
+        <p id="reviews-summary"></p>
+        <button type="button" id="remove-all">Remove all…</button>
+    </div>
+    <div class="panel undo-bar" id="undo-bar" hidden>
+        <span id="undo-text"></span>
+        <button type="button" id="undo-remove">Undo</button>
+    </div>
+    <ul id="review-list"></ul>
+</main>
+</body>
+</html>

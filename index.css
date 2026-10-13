@@ -170,10 +170,12 @@ kbd {
 /* --- Board ----------------------------------------------------------------- */
 
 #board-area {
+    position: relative; /* For the toasts */
     display: flex;
     flex-direction: column;
     align-items: center;
 }
+#board-wrap[hidden], #board-hint[hidden] { display: none; }
 #board-controls, #board-wrap {
     width: min(100%, calc(100vh - 9rem), 760px);
     min-width: 280px;
@@ -184,12 +186,18 @@ kbd {
     gap: .4rem;
     margin-bottom: .5rem;
 }
+#board-controls { height: 2.2rem; } /* Fixed, like the problem bar, so the board never moves */
 #status {
     flex: 1;
+    min-width: 0;
     text-align: center;
     color: var(--muted);
     font-size: .9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+#score { color: var(--muted); font-size: .8rem; white-space: nowrap; }
 #board-wrap { position: relative; }
 #board {
     display: block;
@@ -239,7 +247,7 @@ kbd {
 
 #toasts {
     position: absolute;
-    top: 8%;
+    top: 7.5rem; /* Just below the controls and problem bar */
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -366,26 +374,37 @@ label { cursor: pointer; }
 
 body:not([data-mode="explore"]) .explore-only { display: none; }
 body:not([data-mode="problems"]) .problems-only { display: none; }
-#problem-kind { flex: none; font-size: .78rem; }
+#problem-kind { font-size: .75rem; font-weight: normal; vertical-align: .1em; }
 #problem-kind[hidden] { display: none; }
 .segmented label { white-space: nowrap; }
 
+/* Fixed height, with the prompt limited to two lines, so the board below never moves */
 #problem-bar {
     width: min(100%, calc(100vh - 9rem), 760px);
     min-width: 280px;
+    height: 3.6rem;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: .4rem .6rem;
+    gap: .6rem;
     margin-bottom: .5rem;
-    padding: .5rem .75rem;
+    padding: 0 .75rem;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 8px;
 }
 #problem-bar[hidden] { display: none; }
-#problem-prompt { flex: 1; font-weight: 600; min-width: 12em; }
-#score { color: var(--muted); font-size: .85rem; }
+#problem-text {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-weight: 600;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.problem-actions { flex: none; display: flex; gap: .4rem; }
 #problem-bar button.primary { padding: .3em 1.2em; }
 
 /* --- Follow-up variations -------------------------------------------------- */
@@ -474,8 +493,8 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
 body:not([data-mode="review"]) .review-only { display: none; }
 body[data-mode="review"] .not-review { display: none; }
 #review-summary { margin: .6rem 0 0; color: var(--muted); font-size: .85rem; }
-#clear-reviews { font-size: .8rem; color: var(--muted); }
-#clear-reviews[hidden] { display: none; }
+#manage-reviews { display: inline-block; margin-top: .3rem; font-size: .85rem; }
+#manage-reviews[hidden] { display: none; }
 
 /* Notification dot on the Review mode button when problems are due */
 .segmented label.has-due { position: relative; }

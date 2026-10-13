@@ -96,3 +96,15 @@ test('with no filter, every due review counts, and nextDue says when the next on
     assert.equal(deck.nextDue(), clock.now - MINUTE)
     assert.equal(deck.due().length, 2, 'both colors and kinds')
 })
+
+test('removed items can be restored', () => {
+    const { deck } = makeDeck()
+    deck.recordMiss(spec(['pd', 'qf', 'nc']))
+    deck.recordMiss(spec(['qd', 'od', 'oc']))
+    const removed = [...deck.items]
+    deck.clear()
+    deck.restore(removed)
+    assert.equal(deck.size, 2)
+    deck.restore(removed)
+    assert.equal(deck.size, 2, 'no duplicates')
+})

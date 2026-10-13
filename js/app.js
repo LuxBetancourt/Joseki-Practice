@@ -1,7 +1,7 @@
 import { Position, IllegalMoveError, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError } from './problems.js'
-import { ReviewDeck, reviewKey } from './reviews.js'
+import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath } from './text.js'
@@ -77,8 +77,10 @@ let generation = 0
 //   kind: 'next' | 'punish' | 'shape'
 //   answers: Map of coord -> move type for every move Josekipedia knows there
 //   mistake: { move, type } for punish problems
-//   answer, line, target: for shape problems, the move that starts the line, the line itself and
-//                         the final position it reaches
+//   answer, line, target, step, missed, hint: for shape problems, the move that starts the
+//                         line, the line itself and the final position it reaches; how many of
+//                         its moves have been played; whether the player has gone wrong; and
+//                         whether their next move is highlighted
 //   line, options, wrong: for path problems, the joseki line, the sequences shown (see
 //                         generatePickPath) and the indexes of options already picked wrongly
 //   spec:      the problem as plain data, saved to the review deck if the player misses it
@@ -103,23 +105,16 @@ const dueReviews = () => (settings.mode === 'review'
     ? deck.due()
     : deck.due({ kinds: enabledProblemTypes(), color: humanColor(), startMoves: splitPath(startPath()) }))
 
-/** "in 5 minutes", "in 3 hours", "in 2 days"… for a future timestamp. */
-function relativeTime(time) {
-    const minutes = Math.max(1, Math.round((time - Date.now()) / 60000))
-    const [amount, unit] = minutes < 60 ? [minutes, 'minute']
-        : minutes < 48 * 60 ? [Math.round(minutes / 60), 'hour']
-            : minutes < 60 * 24 * 60 ? [Math.round(minutes / (24 * 60)), 'day']
-                : [Math.round(minutes / (30 * 24 * 60)), 'month']
-    return `in ${amount} ${unit}${amount === 1 ? '' : 's'}`
-}
-
 /** Updates the review deck with how the player did on their first attempt at the problem. */
 function recordFirstAttempt(correct) {
     if (!correct) { deck.recordMiss(problem.spec) }
     else if (problem.reviewKey) { deck.recordSuccess(problem.reviewKey) }
 }
-let statusNote = '' // Shown in the status line while busy, when set
 const problemPending = () => problem && !problem.solved && !problem.revealed
+// Where the player answers: shape problems move along their line as the player plays it out
+const answerIndex = () => problem.index + (problem.kind === 'shape' ? problem.step : 0)
+// Final Shape and Pick the Path follow a fixed sequence, so moving around the game would break them
+const navigationLocked = () => problemPending() && ['shape', 'path'].includes(problem.kind)
 
 const currentEntry = () => history[current]
 const isHumanTurn = (entry = currentEntry()) => freePlay || entry.position.toPlay === humanColor()
@@ -177,7 +172,7 @@ function playMove(coord, { byHuman }) {
         throw e
     }
 
-    const answering = byHuman && problemPending() && current === problem.index
+    const answering = byHuman && problemPending() && current === answerIndex()
     pushEntry({ position, move: { coord, color }, node: undefined, path: entry.path + coord })
     ++generation
     if (answering) {
@@ -220,57 +215,76 @@ const moveTypeMessage = (type) => (MOVE_TYPE_NAMES[type]
  * Shape problems accept the move that starts the target line, or any other joseki move whose own
  * main line reaches the same final position.
  */
+/**
+ * Final Shape: the player plays out the whole line, one of their moves at a time. The line's move
+ * is correct, as is any other joseki move whose main line still reaches the target (the line then
+ * follows that move instead). Any wrong move counts as a miss for the score and the review deck.
+ */
 async function gradeShapeAnswer(coord) {
-    const score = stats.shape
-    if (++problem.attempts === 1) { ++score.attempted }
     const gen = generation
-    const start = history[problem.index]
-    const type = problem.answers.get(coord)
+    const at = answerIndex()
+    const start = history[at]
+    if (++problem.attempts === 1) { ++stats.shape.attempted }
 
-    let rest = coord === problem.answer ? problem.line.slice(1) : null
-    if (!rest && (type === MoveType.IDEAL || type === MoveType.GOOD)) {
+    let rest = coord === problem.line[problem.step].move ? problem.line.slice(problem.step + 1) : null
+    let type = null
+    try {
         setBusy(true)
-        try {
-            const child = start.node.children.find((c) => c.move === coord && c.color === humanColor())
+        await resolveNode(at)
+        const child = start.node?.children.find((c) => c.move === coord && c.color === humanColor())
+        type = child ? child.type : null
+        if (!rest && (type === MoveType.IDEAL || type === MoveType.GOOD)) {
             const line = await lineAfter(child, start.position)
             if (line.position.sameStones(problem.target)) { rest = line.moves }
         }
-        catch { /* Couldn't check for a transposition; treat it as a different shape */ }
-        if (gen !== generation) { return }
     }
-    if (problem.attempts === 1) { recordFirstAttempt(Boolean(rest)) }
+    catch { /* Couldn't check for a transposition; treat it as a different shape */ }
+    if (gen !== generation) { return }
 
-    if (rest) {
-        problem.solved = true
-        if (problem.attempts === 1) { ++score.solved }
-        toast(coord === problem.answer ? '✓✓ Correct! Here’s how it continues.' : '✓✓ Correct! (A different move order to the same shape.)', 'success')
-        playOut(rest)
+    if (!rest) {
+        if (!problem.missed) {
+            problem.missed = true
+            recordFirstAttempt(false)
+        }
+        const point = fromSgf(coord)
+        let message = moveTypeMessage(type)
+        if (point && problem.target.at(point.x, point.y) === humanColor()) {
+            message = `That stone is part of the shape, but it isn’t played ${problem.step ? 'next' : 'first'}.`
+        }
+        else if (type === MoveType.IDEAL || type === MoveType.GOOD) { message = 'That’s joseki, but it leads to a different shape.' }
+        toast(`${message} Try again.`, 'error')
+        takeBackWrongAnswer()
         return
     }
 
-    const point = fromSgf(coord)
-    let message = moveTypeMessage(type)
-    if (point && problem.target.at(point.x, point.y) === humanColor()) { message = 'That stone is part of the shape, but it isn’t played first.' }
-    else if (type === MoveType.IDEAL || type === MoveType.GOOD) { message = 'That’s joseki, but it leads to a different shape.' }
-    toast(`${message} Try again.`, 'error')
-    takeBackWrongAnswer()
+    problem.line = [...problem.line.slice(0, problem.step), { move: coord, color: humanColor() }, ...rest]
+    problem.step += 1
+    problem.hint = false
+    continueShape()
 }
 
-/** Plays `moves` onto the board one at a time, so the player can follow the sequence. */
-async function playOut(moves) {
+/** The computer plays the other side's moves along the shape line, until it's the player's turn or the shape is complete. */
+async function continueShape() {
     const gen = generation
-    statusNote = 'Playing out the joseki…'
     setBusy(true)
-    for (const { move, color } of moves) {
-        await delay(550)
-        if (gen !== generation) { break }
+    while (problem.step < problem.line.length && problem.line[problem.step].color !== humanColor()) {
+        await delay(450)
+        if (gen !== generation) { return }
+        const { move, color } = problem.line[problem.step]
         const entry = currentEntry()
         pushEntry({ position: entry.position.playSgf(move, color), move: { coord: move, color }, node: undefined, path: entry.path + move })
+        problem.step += 1
         render()
     }
-    statusNote = ''
-    if (gen !== generation) { return }
-    try { await resolveNode(current) } // Load the final move's comment
+    if (problem.step >= problem.line.length) {
+        problem.solved = true
+        if (!problem.missed) {
+            ++stats.shape.solved
+            recordFirstAttempt(true)
+        }
+        toast(problem.missed ? 'That’s the final shape.' : '✓✓ That’s the final shape!', 'success')
+    }
+    try { await resolveNode(current) } // Load the move info
     catch { /* The move info will say it couldn't be found */ }
     if (gen === generation) { setBusy(false) }
 }
@@ -278,11 +292,12 @@ async function playOut(moves) {
 /** Shows a wrong answer briefly, then takes it back. */
 function takeBackWrongAnswer() {
     const gen = generation
+    const at = answerIndex()
     setBusy(true)
     setTimeout(() => {
         if (gen !== generation) { return }
-        history = history.slice(0, problem.index + 1)
-        current = problem.index
+        history = history.slice(0, at + 1)
+        current = at
         ++generation
         setBusy(false)
     }, 1200)
@@ -290,6 +305,18 @@ function takeBackWrongAnswer() {
 
 function revealAnswer() {
     if (!problemPending()) { return }
+    if (problem.kind === 'shape') {
+        // A hint: highlight the player's next move, and let them carry on playing it out
+        if (problem.attempts === 0) { ++stats.shape.attempted }
+        if (!problem.missed) {
+            problem.missed = true
+            recordFirstAttempt(false)
+        }
+        problem.hint = true
+        if (current !== answerIndex()) { goTo(answerIndex()) }
+        render()
+        return
+    }
     problem.revealed = true
     if (problem.attempts === 0) {
         ++stats[problem.kind].attempted
@@ -302,7 +329,11 @@ function revealAnswer() {
 const problemPrompt = () => {
     const you = capitalize(colorName(humanColor()))
     if (problem.kind === 'next') { return `${you} to play. Find the joseki move.` }
-    if (problem.kind === 'shape') { return `${you} to play. The faded stones show where the joseki ends up. Find the move that starts it.` }
+    if (problem.kind === 'shape') {
+        if (!problem.step) { return `${you} to play. Play out the joseki to reach the faded shape; the computer plays the other side.` }
+        const left = problem.line.slice(problem.step).filter((m) => m.color === humanColor()).length
+        return `Keep going: ${left} more move${left === 1 ? '' : 's'} to reach the shape.`
+    }
     if (problem.kind === 'path') { return 'Which sequence is joseki, with both sides playing joseki moves from here?' }
     const { move, type } = problem.mistake
     const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
@@ -374,7 +405,7 @@ async function newProblem() {
         }
         setupPosition(found.moves)
         problem = {
-            ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [],
+            ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [], step: 0, missed: false, hint: false,
             spec: { kind, moves: found.moves, color: reviewColor || humanColor(), data: problemData(kind, found) },
             reviewKey,
         }
@@ -482,12 +513,14 @@ function goTo(index) {
 }
 
 function undo() {
+    if (navigationLocked()) { return }
     let target = current - 1
     while (target > 0 && !isHumanTurn(history[target])) { --target }
     goTo(target)
 }
 
 function redo() {
+    if (navigationLocked()) { return }
     let target = current + 1
     while (target < history.length - 1 && !isHumanTurn(history[target])) { ++target }
     goTo(target)
@@ -498,6 +531,7 @@ function redo() {
  * if it's the most recent move. If that leaves the computer to move, it picks a new reply.
  */
 function returnToMove(x, y) {
+    if (navigationLocked()) { return }
     const coord = toSgf(x, y)
     if (currentEntry().position.at(x, y) === 0) { return }
     for (let i = current; i > 0; --i) {
@@ -587,11 +621,11 @@ function render() {
 
     const toHighlight = (move, type) => ({ ...fromSgf(move), type: MOVE_TYPE_NAMES[type] || 'unknown' })
     let highlights = []
-    if (problem?.revealed && current === problem.index) {
-        if (problem.kind === 'shape') {
-            highlights = [toHighlight(problem.answer, MoveType.IDEAL)]
-        }
-        else if (problem.kind === 'path') {
+    if (problem?.kind === 'shape' && problem.hint && current === answerIndex()) {
+        highlights = [toHighlight(problem.line[problem.step].move, MoveType.IDEAL)]
+    }
+    else if (problem?.revealed && current === problem.index) {
+        if (problem.kind === 'path') {
             highlights = [] // The correct sequence is marked among the choices instead
         }
         else {
@@ -604,19 +638,23 @@ function render() {
             .filter((child) => child.color === position.toPlay)
             .map((child) => toHighlight(child.move, child.type))
     }
-    // The faded target stays up while a wrong answer is briefly shown
-    const showTarget = problem?.kind === 'shape' && ((problemPending() && current >= problem.index) || (problem.revealed && current === problem.index))
+    // The faded target stays up while the player plays it out (and while a wrong move is shown)
+    const showTarget = problem?.kind === 'shape' && problemPending() && current >= problem.index
     const target = showTarget ? problem.target : null
     view.render({ position, lastMove, highlights: highlights.filter((h) => h.x !== undefined), marks: currentMarks(), target })
 
-    $('#undo').disabled = current === 0
-    $('#redo').disabled = current === history.length - 1
+    // Pick the Path shows only the sequences, not the board
+    const pathProblem = problem?.kind === 'path' && current >= problem.index
+    $('#board-wrap').hidden = pathProblem
+    $('#board-hint').hidden = pathProblem
+    $('#undo').disabled = current === 0 || navigationLocked()
+    $('#redo').disabled = current === history.length - 1 || navigationLocked()
     $('#pass').disabled = !canPlayOnBoard()
 
     const toPlay = capitalize(colorName(position.toPlay))
-    const showingWrongAnswer = problemPending() && current > problem.index
+    const showingWrongAnswer = problemPending() && current > answerIndex()
     $('#status').textContent = showingWrongAnswer ? '' : busy
-        ? statusNote || (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
+        ? (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
         : problemPending() && problem.kind === 'path' ? 'Choose a sequence below'
         : ['shape', 'path'].includes(problem?.kind) && problem.solved && !isHumanTurn() ? '' // The joseki is complete
             : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
@@ -703,8 +741,8 @@ function gradePath(i) {
     if (!option.mistake) {
         problem.solved = true
         if (problem.attempts === 1) { ++score.solved }
-        toast('✓✓ Correct! Here’s the joseki.', 'success')
-        playOut(problem.line)
+        toast('✓✓ Correct! That’s the joseki.', 'success')
+        render()
         return
     }
     problem.wrong.push(i)
@@ -804,7 +842,10 @@ function followUpCard(child, position, key) {
 function renderProblemBar() {
     const inProblemMode = settings.mode !== 'explore'
     $('#problem-bar').hidden = !inProblemMode
-    if (!inProblemMode) { return }
+    if (!inProblemMode) {
+        $('#score').textContent = ''
+        return
+    }
 
     $('#problem-kind').textContent = problem ? PROBLEM_TYPE_NAMES[problem.kind] + (problem.reviewKey ? ' · Review' : '') : ''
     $('#problem-kind').hidden = !problem
@@ -814,11 +855,12 @@ function renderProblemBar() {
     else if (problem?.solved) {
         prompt = { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.' }[problem.kind] || 'Solved! Keep playing, or get a new problem.'
     }
-    else if (problem?.revealed) { prompt = problem.kind === 'shape' ? 'The answer is highlighted.' : 'Answers are highlighted.' }
+    else if (problem?.revealed) { prompt = 'Answers are highlighted.' }
     else if (!problem && !busy) {
         prompt = settings.mode === 'review' ? reviewEmptyPrompt() : 'No problem loaded. Try again, or choose another starting point.'
     }
     $('#problem-prompt').textContent = prompt
+    $('#problem-text').title = prompt // In case two lines cut it off
     $('#show-answer').disabled = !problemPending() || busy
     const kinds = Object.keys(stats)
     const solved = kinds.reduce((sum, kind) => sum + stats[kind].solved, 0)
@@ -843,7 +885,7 @@ function renderReviewStatus() {
     $('#review-summary').textContent = !deck.size
         ? 'Missed problems are saved here for review.'
         : `${deck.size} saved · ${dueCount ? `${dueCount} due now` : `next due ${relativeTime(deck.nextDue())}`}`
-    $('#clear-reviews').hidden = !deck.size
+    $('#manage-reviews').hidden = !deck.size
 }
 
 function reviewEmptyPrompt() {
@@ -1109,12 +1151,6 @@ function bindControls() {
     }
     $('#show-answer').addEventListener('click', revealAnswer)
     $('#next-problem').addEventListener('click', () => newProblem())
-    $('#clear-reviews').addEventListener('click', () => {
-        if (deck.size && confirm(`Remove all ${deck.size} saved review problems? This can't be undone.`)) {
-            deck.clear()
-            render()
-        }
-    })
     // Reviews become due over time, so keep the counts fresh
     setInterval(() => {
         renderReviewStatus()
