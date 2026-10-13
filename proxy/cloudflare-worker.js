@@ -1,8 +1,8 @@
 // Cloudflare Worker that proxies Josekipedia node lookups with CORS headers and edge caching.
 // Josekipedia doesn't allow cross-origin requests, so the site needs this (or similar) in production.
 //
-// Deploy:  npx wrangler deploy proxy/cloudflare-worker.js --name joseki-proxy --compatibility-date 2026-01-01
-// Then set NODE_URL in js/config.js to  https://joseki-proxy.<your-subdomain>.workers.dev/api/node/{id}
+// Deploy:  cd proxy && npx wrangler deploy   (settings are in wrangler.toml)
+// Then set PRODUCTION_NODE_URL in js/config.js to  https://joseki-proxy.<your-subdomain>.workers.dev/api/node/{id}
 //
 // Only /api/node/{numeric id} is forwarded, so this can't be used as an open proxy.
 

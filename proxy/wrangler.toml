@@ -1,0 +1,7 @@
+# Deploy from this folder with:  npx wrangler deploy
+name = "joseki-proxy"
+main = "cloudflare-worker.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://josekipractice.neocities.org"
