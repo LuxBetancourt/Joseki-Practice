@@ -366,7 +366,6 @@ label { cursor: pointer; }
 
 body:not([data-mode="explore"]) .explore-only { display: none; }
 body:not([data-mode="problems"]) .problems-only { display: none; }
-#problem-types { margin-top: .5rem; }
 #problem-kind { flex: none; font-size: .78rem; }
 #problem-kind[hidden] { display: none; }
 .segmented label { white-space: nowrap; }
@@ -437,3 +436,4 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
 .goban .removed.on-black { stroke: #fff; }
 .goban .removed.on-white { stroke: #000; }
 .tree-row label:has(input:disabled) { opacity: .45; cursor: help; }
+#options > :is(h2.explore-only, h2.problems-only) { margin-top: 0; } /* Whichever shows is the first heading */

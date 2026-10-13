@@ -46,11 +46,6 @@
             <input type="radio" name="mode" id="mode-explore" value="explore"><label for="mode-explore" title="Play against the computer from a starting point">Explore</label>
             <input type="radio" name="mode" id="mode-problems" value="problems"><label for="mode-problems" title="Solve problems taken from the selected starting point">Problems</label>
         </div>
-        <ul class="plain problems-only" id="problem-types" aria-label="Problem types">
-            <li title="Find the joseki move from a position partway through a joseki."><label><input type="checkbox" data-problem-type="next"> Next Move</label></li>
-            <li title="The computer makes a mistake or plays a trick move; find the move that punishes it."><label><input type="checkbox" data-problem-type="punish"> Punish</label></li>
-            <li title="Faded stones show the shape a joseki ends in; find the move that starts it."><label><input type="checkbox" data-problem-type="shape"> Final Shape</label></li>
-        </ul>
 
         <h2>Player</h2>
         <div class="segmented" role="radiogroup" aria-label="Play as">
@@ -71,6 +66,12 @@
     </aside>
 
     <aside id="options" class="panel">
+        <h2 class="problems-only">Problem Types</h2>
+        <ul class="plain problems-only" id="problem-types" aria-label="Problem types">
+            <li title="Find the joseki move from a position partway through a joseki."><label><input type="checkbox" data-problem-type="next"> Next Move</label></li>
+            <li title="The computer makes a mistake or plays a trick move; find the move that punishes it."><label><input type="checkbox" data-problem-type="punish"> Punish</label></li>
+            <li title="Faded stones show the shape a joseki ends in; find the move that starts it."><label><input type="checkbox" data-problem-type="shape"> Final Shape</label></li>
+        </ul>
         <h2 class="explore-only">Computer Plays</h2>
         <ul class="plain explore-only">
             <li><label><input type="checkbox" data-setting="ideal"> <span class="swatch ideal"></span>Ideal moves</label></li>
