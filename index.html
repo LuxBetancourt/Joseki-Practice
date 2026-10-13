@@ -37,6 +37,7 @@
             <svg id="board" role="img" aria-label="Go board"></svg>
             <div id="toasts" aria-live="polite"></div>
         </div>
+        <div id="path-choices" hidden></div>
         <p class="hint">Right-click a stone to return to that move.</p>
     </section>
 
@@ -71,6 +72,7 @@
             <li title="Find the joseki move from a position partway through a joseki."><label><input type="checkbox" data-problem-type="next"> Next Move</label></li>
             <li title="The computer makes a mistake or plays a trick move; find the move that punishes it."><label><input type="checkbox" data-problem-type="punish"> Punish</label></li>
             <li title="Faded stones show the shape a joseki ends in; find the move that starts it."><label><input type="checkbox" data-problem-type="shape"> Final Shape</label></li>
+            <li title="Several sequences are shown; only one is joseki. Spot it."><label><input type="checkbox" data-problem-type="path"> Pick the Path</label></li>
         </ul>
         <h2 class="explore-only">Computer Plays</h2>
         <ul class="plain explore-only">

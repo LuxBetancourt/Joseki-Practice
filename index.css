@@ -437,3 +437,34 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
 .goban .removed.on-white { stroke: #000; }
 .tree-row label:has(input:disabled) { opacity: .45; cursor: help; }
 #options > :is(h2.explore-only, h2.problems-only) { margin-top: 0; } /* Whichever shows is the first heading */
+
+/* --- Pick the Path choices -------------------------------------------------- */
+
+#path-choices {
+    width: min(100%, calc(100vh - 9rem), 760px);
+    min-width: 280px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+    margin-top: .75rem;
+}
+#path-choices[hidden] { display: none; }
+.path-card {
+    margin: 0;
+    padding: .4rem;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+}
+.path-card button { display: block; width: 100%; padding: 0; border: 0; background: none; border-radius: 4px; }
+.path-card button:hover:not(:disabled) { background: none; outline: 2px solid var(--accent); }
+.path-card button:disabled { opacity: 1; cursor: default; }
+.path-card svg { display: block; width: 100%; aspect-ratio: 1; border-radius: 4px; }
+.path-card figcaption { margin-top: .35rem; font-size: .85rem; min-height: 2.6em; }
+.path-card.wrong { border-color: var(--bad); }
+.path-card.wrong svg { opacity: .6; }
+.path-card.correct { border-color: var(--ideal); }
+.path-card.correct .path-explanation { color: var(--ideal); font-weight: 600; }
+/* The ring marking where a sequence goes wrong only shows once it's been explained */
+#path-choices .path-card:not(.wrong) .ring.bad { display: none; }
+.goban .ring.bad { stroke: var(--bad); }

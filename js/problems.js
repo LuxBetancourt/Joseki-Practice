@@ -1,7 +1,7 @@
 // Generates problems by walking random joseki lines through Josekipedia.
 // Each step costs one node lookup, so walks stop at a random target depth.
 
-import { Position, PASS, fromSgf, opponent } from './go.js'
+import { Position, PASS, SIZE, EMPTY, fromSgf, toSgf, opponent } from './go.js'
 import { ROOT_ID, MoveType } from './josekipedia.js'
 import { CLASSIC_OPENINGS } from './starting-points.js'
 import { mainLine } from './lines.js'
@@ -11,6 +11,11 @@ const MAX_DEPTH = 30
 const MAX_MISTAKES_CHECKED = 6
 const MAX_SHAPE_CANDIDATES = 3
 const MAX_SHAPE_LINE = 10 // Longer targets are too much to picture at once
+const PATH_OPTIONS = 3
+const MIN_PATH_LINE = 3
+const MAX_PATH_LINE = 10
+const MAX_DEVIATIONS_CHECKED = 6
+const MISTAKE_TYPES = [MoveType.BAD, MoveType.TRICK, MoveType.QUESTION]
 const MIN_MOVES = 3 // Skip trivial positions like answering the very first approach
 
 const isLegal = (position, child) => {
@@ -148,4 +153,92 @@ export async function generateFinalShape({ startMoves, color, firstTen, getNode,
         }
     }
     return null
+}
+
+/** Plays a line of { move, color } onto a position; returns null if a move is illegal. */
+function playLine(position, line) {
+    try {
+        return line.reduce((p, { move, color }) => p.playSgf(move, color), position)
+    }
+    catch {
+        return null
+    }
+}
+
+/**
+ * "Pick the path" problem: from a position partway through a joseki, several numbered sequences
+ * are shown and only one is the joseki (both sides play the main line). The others branch off it:
+ * first with mistakes Josekipedia records (followed by how that branch continues), then, if there
+ * aren't enough, with a random nearby non-joseki move near the end of the line.
+ * Returns { moves, line, options: [{ line, position, mistake? }] } or null, where the correct
+ * option has no `mistake` and the others have { step, move, color, type } (type null = made up).
+ */
+export async function generatePickPath({ startMoves, color, firstTen, getNode, random = Math.random }) {
+    const candidates = []
+    await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
+        const suitable = state.position.toPlay === color && state.moves.length >= MIN_MOVES
+            && josekiMoves(state.node, state.position, false).length > 0
+        if (suitable) { candidates.push(state) }
+        return suitable
+    })
+
+    // Deepest first, find a position whose main line is a sensible length
+    let chosen = null
+    let main = null
+    for (const state of candidates.reverse().slice(0, MAX_SHAPE_CANDIDATES)) {
+        const line = await mainLine({ node: state.node, position: state.position, getNode })
+        if (line.moves.length >= MIN_PATH_LINE && line.moves.length <= MAX_PATH_LINE) {
+            chosen = state
+            main = line
+            break
+        }
+    }
+    if (!chosen) { return null }
+
+    const options = [{ line: main.moves, position: main.position }]
+    const addOption = (line, mistake) => {
+        const position = playLine(chosen.position, line)
+        if (position && options.every((option) => !option.position.sameStones(position))) {
+            options.push({ line, position, mistake })
+        }
+    }
+
+    // Mistakes recorded along the main line, followed by how Josekipedia continues from them
+    const deviations = []
+    main.states.forEach((state, step) => {
+        for (const child of state.node.children) {
+            if (child.color === state.position.toPlay && MISTAKE_TYPES.includes(child.type)
+                && child.move !== PASS && isLegal(state.position, child)) {
+                deviations.push({ step, child })
+            }
+        }
+    })
+    for (const { step, child } of shuffle(deviations, random).slice(0, MAX_DEVIATIONS_CHECKED)) {
+        if (options.length >= PATH_OPTIONS) { break }
+        const state = main.states[step]
+        const rest = await mainLine({ node: await getNode(child.id), position: state.position.playSgf(child.move, child.color), getNode })
+        // Keep it about as long as the correct line, so length doesn't give the answer away
+        const line = [...main.moves.slice(0, step), { move: child.move, color: child.color }, ...rest.moves]
+            .slice(0, main.moves.length + 2)
+        addOption(line, { step, move: child.move, color: child.color, type: child.type })
+    }
+
+    // Not enough recorded mistakes: replace one of the last two moves with a random nearby
+    // move that isn't joseki there
+    for (let tries = 0; options.length < PATH_OPTIONS && tries < 30; ++tries) {
+        const step = main.moves.length - 1 - Math.floor(random() * 2)
+        const { node, position } = main.states[step]
+        const original = fromSgf(main.moves[step].move)
+        const x = original.x + Math.floor(random() * 5) - 2
+        const y = original.y + Math.floor(random() * 5) - 2
+        if (x < 0 || y < 0 || x >= SIZE || y >= SIZE || position.at(x, y) !== EMPTY) { continue }
+        const move = toSgf(x, y)
+        const known = node.children.find((child) => child.move === move && child.color === position.toPlay)
+        if (known && (known.type === MoveType.IDEAL || known.type === MoveType.GOOD)) { continue }
+        const stoneColor = position.toPlay
+        addOption([...main.moves.slice(0, step), { move, color: stoneColor }], { step, move, color: stoneColor, type: known ? known.type : null })
+    }
+
+    if (options.length < PATH_OPTIONS) { return null }
+    return { moves: chosen.moves, line: main.moves, options: shuffle(options, random) }
 }

@@ -20,18 +20,21 @@ function isNearStones(position, point) {
  * From a fully loaded `node` and the `position` it leads to, repeatedly plays the first ideal
  * move for the side to play. Stops when the joseki ends: the next ideal move is tenuki or far
  * away, there is none, or Josekipedia marks the position as settled.
- * Returns { moves: [{ move, color }], position, node }.
+ * Returns { moves: [{ move, color }], position, node, states }, where states[i] is the
+ * { node, position } before moves[i].
  */
 export async function mainLine({ node, position, getNode }) {
     const moves = []
+    const states = []
     while (moves.length < MAX_LENGTH && !node.labels.includes(SETTLED_LABEL)) {
         const next = node.children.find((child) => child.color === position.toPlay && child.type === MoveType.IDEAL)
         const point = next && next.move !== PASS && fromSgf(next.move)
         if (!point || !isNearStones(position, point) || !position.isLegal(point.x, point.y, next.color)) { break }
 
+        states.push({ node, position })
         position = position.play(point.x, point.y, next.color)
         moves.push({ move: next.move, color: next.color })
         node = await getNode(next.id)
     }
-    return { moves, position, node }
+    return { moves, position, node, states }
 }

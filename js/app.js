@@ -1,6 +1,6 @@
 import { Position, IllegalMoveError, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
-import { generateNextMove, generatePunish, generateFinalShape } from './problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath } from './problems.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath } from './text.js'
@@ -14,7 +14,7 @@ const $ = (selector) => document.querySelector(selector)
 
 const DEFAULT_SETTINGS = {
     mode: 'explore', // 'explore' | 'problems'
-    problemTypes: { next: true, punish: true, shape: true },
+    problemTypes: { next: true, punish: true, shape: true, path: true },
     player: 'black',
     ideal: true, good: false, bad: false, trick: false, question: false,
     firstTen: true,
@@ -77,29 +77,34 @@ let generation = 0
 //   mistake: { move, type } for punish problems
 //   answer, line, target: for shape problems, the move that starts the line, the line itself and
 //                         the final position it reaches
+//   line, options, wrong: for path problems, the joseki line, the sequences shown (see
+//                         generatePickPath) and the indexes of options already picked wrongly
 let problem = null
 const stats = { // This session's score per mode
     next: { solved: 0, attempted: 0 },
     punish: { solved: 0, attempted: 0 },
     shape: { solved: 0, attempted: 0 },
+    path: { solved: 0, attempted: 0 },
 }
-const GENERATORS = { next: generateNextMove, punish: generatePunish, shape: generateFinalShape }
-const PROBLEM_TYPE_NAMES = { next: 'Next Move', punish: 'Punish', shape: 'Final Shape' }
+const GENERATORS = { next: generateNextMove, punish: generatePunish, shape: generateFinalShape, path: generatePickPath }
+const PROBLEM_TYPE_NAMES = { next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path' }
 const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => settings.problemTypes[kind])
 let statusNote = '' // Shown in the status line while busy, when set
 const problemPending = () => problem && !problem.solved && !problem.revealed
 
 const currentEntry = () => history[current]
 const isHumanTurn = (entry = currentEntry()) => freePlay || entry.position.toPlay === humanColor()
+// Path problems are answered by picking a sequence, not by playing on the board
+const canPlayOnBoard = () => !busy && isHumanTurn() && !(problemPending() && problem.kind === 'path')
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const view = new BoardView($('#board'), {
     onPlay: (x, y) => {
-        if (!busy && isHumanTurn()) { playMove(toSgf(x, y), { byHuman: true }) }
+        if (canPlayOnBoard()) { playMove(toSgf(x, y), { byHuman: true }) }
     },
     onContextMenu: returnToMove,
-    canHover: () => (!busy && isHumanTurn() ? currentEntry().position.toPlay : null),
+    canHover: () => (canPlayOnBoard() ? currentEntry().position.toPlay : null),
 })
 
 function setBusy(value) {
@@ -264,6 +269,7 @@ const problemPrompt = () => {
     const you = capitalize(colorName(humanColor()))
     if (problem.kind === 'next') { return `${you} to play. Find the joseki move.` }
     if (problem.kind === 'shape') { return `${you} to play. The faded stones show where the joseki ends up. Find the move that starts it.` }
+    if (problem.kind === 'path') { return 'Which sequence is joseki, with both sides playing joseki moves from here?' }
     const { move, type } = problem.mistake
     const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
     const where = sgfToDisplay(move)
@@ -299,7 +305,7 @@ async function newProblem() {
             return
         }
         setupPosition(found.moves)
-        problem = { ...found, kind, index: current, attempts: 0, solved: false, revealed: false }
+        problem = { ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [] }
         ++generation
         advance()
     }
@@ -431,7 +437,7 @@ function returnToMove(x, y) {
 }
 
 function pass() {
-    if (!busy && isHumanTurn()) { playMove(PASS, { byHuman: true }) }
+    if (canPlayOnBoard()) { playMove(PASS, { byHuman: true }) }
 }
 
 function startGame(start) {
@@ -513,6 +519,9 @@ function render() {
         if (problem.kind === 'shape') {
             highlights = [toHighlight(problem.answer, MoveType.IDEAL)]
         }
+        else if (problem.kind === 'path') {
+            highlights = [] // The correct sequence is marked among the choices instead
+        }
         else {
             const accepted = problem.kind === 'next' ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
             highlights = [...problem.answers].filter(([, type]) => accepted.includes(type)).map(([move, type]) => toHighlight(move, type))
@@ -530,18 +539,103 @@ function render() {
 
     $('#undo').disabled = current === 0
     $('#redo').disabled = current === history.length - 1
-    $('#pass').disabled = busy || !isHumanTurn()
+    $('#pass').disabled = !canPlayOnBoard()
 
     const toPlay = capitalize(colorName(position.toPlay))
     const showingWrongAnswer = problemPending() && current > problem.index
     $('#status').textContent = showingWrongAnswer ? '' : busy
         ? statusNote || (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
-        : problem?.kind === 'shape' && problem.solved && !isHumanTurn() ? '' // The joseki is complete
+        : problemPending() && problem.kind === 'path' ? 'Choose a sequence below'
+        : ['shape', 'path'].includes(problem?.kind) && problem.solved && !isHumanTurn() ? '' // The joseki is complete
             : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
 
     renderProblemBar()
+    renderPathChoices()
     renderMoveInfo(entry)
     renderFollowUps(entry)
+}
+
+// --- Pick the Path choices ------------------------------------------------------
+
+let pathChoicesFor = null // The problem the choice cards were built for
+
+function renderPathChoices() {
+    const container = $('#path-choices')
+    const show = problem?.kind === 'path' && current >= problem.index
+    container.hidden = !show
+    if (!show) { return }
+
+    if (pathChoicesFor !== problem) {
+        pathChoicesFor = problem
+        container.replaceChildren(...problem.options.map((option, i) => pathCard(option, i)))
+    }
+
+    // Update the cards' state: wrong picks, and everything once answered
+    const answered = !problemPending()
+    container.classList.toggle('answered', answered)
+    container.querySelectorAll('.path-card').forEach((card, i) => {
+        const option = problem.options[i]
+        card.classList.toggle('wrong', problem.wrong.includes(i) || (answered && Boolean(option.mistake)))
+        card.classList.toggle('correct', answered && !option.mistake)
+        card.querySelector('.path-explanation').textContent = answered || problem.wrong.includes(i) ? pathExplanation(option) : ''
+        card.querySelector('button').disabled = answered || problem.wrong.includes(i)
+    })
+}
+
+function pathCard(option, i) {
+    const card = document.createElement('figure')
+    card.className = 'path-card'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.setAttribute('aria-label', `Sequence ${'ABC'[i]}`)
+    button.addEventListener('click', () => gradePath(i))
+
+    // All cards share one region so they're easy to compare
+    const start = history[problem.index].position
+    const points = problem.options.flatMap(({ line, position }) => localShape(position, line.map(({ move }) => fromSgf(move))))
+    const region = shapeRegion(start, points)
+    const numbers = new Map(option.line.map(({ move }, n) => {
+        const { x, y } = fromSgf(move)
+        return [`${x},${y}`, n + 1]
+    }))
+    const rings = []
+    if (option.mistake) { rings.push({ ...fromSgf(option.mistake.move), type: 'bad' }) }
+    button.append(renderShape(option.position, { region, numbers, rings, label: `Sequence ${'ABC'[i]}` }))
+
+    const caption = document.createElement('figcaption')
+    const letter = document.createElement('strong')
+    letter.textContent = 'ABC'[i]
+    const explanation = document.createElement('span')
+    explanation.className = 'path-explanation'
+    caption.append(letter, ' ', explanation)
+    card.append(button, caption)
+    return card
+}
+
+function pathExplanation(option) {
+    if (!option.mistake) { return '✓ Joseki' }
+    const { step, move, color, type } = option.mistake
+    const what = MOVE_TYPE_NAMES[type]
+        ? `is a ${MOVE_TYPE_NAMES[type] === 'question' ? 'questionable' : MOVE_TYPE_NAMES[type]} move`
+        : 'isn’t joseki'
+    return `Move ${step + 1}: ${capitalize(colorName(color))}’s ${sgfToDisplay(move)} ${what}.`
+}
+
+function gradePath(i) {
+    if (!problemPending() || busy) { return }
+    const score = stats.path
+    if (++problem.attempts === 1) { ++score.attempted }
+    const option = problem.options[i]
+    if (!option.mistake) {
+        problem.solved = true
+        if (problem.attempts === 1) { ++score.solved }
+        toast('✓✓ Correct! Here’s the joseki.', 'success')
+        playOut(problem.line)
+        return
+    }
+    problem.wrong.push(i)
+    toast(`${pathExplanation(option)} Try again.`, 'error')
+    render()
 }
 
 // --- Follow-up variations ----------------------------------------------------
@@ -643,7 +737,9 @@ function renderProblemBar() {
 
     let prompt = ''
     if (problemPending()) { prompt = problemPrompt() }
-    else if (problem?.solved) { prompt = problem.kind === 'shape' ? 'Solved! That’s the final shape.' : 'Solved! Keep playing, or get a new problem.' }
+    else if (problem?.solved) {
+        prompt = { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.' }[problem.kind] || 'Solved! Keep playing, or get a new problem.'
+    }
     else if (problem?.revealed) { prompt = problem.kind === 'shape' ? 'The answer is highlighted.' : 'Answers are highlighted.' }
     else if (!problem && !busy) { prompt = 'No problem loaded. Try again, or choose another starting point.' }
     $('#problem-prompt').textContent = prompt

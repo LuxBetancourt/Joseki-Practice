@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -94,5 +94,79 @@ test("final shape: returns null when no line has two of the player's stones", as
     }
     const getTreeNode = async (id) => ({ id, labels: [], children: (tree[id] || []).map((c) => ({ labels: [], ...c })) })
     const problem = await generateFinalShape({ startMoves: ['pd', 'qf', 'nc', 'qc'], color: BLACK, firstTen: true, getNode: getTreeNode, random: sequence([0.3]) })
+    assert.equal(problem, null)
+})
+
+// pd qf nc qc, then black's main line is qd pc od
+const pathTree = (extra = {}) => ({
+    1: [{ id: 40, move: 'pd', color: B, type: 0 }],
+    40: [{ id: 42, move: 'qf', color: W, type: 0 }],
+    42: [{ id: 43, move: 'nc', color: B, type: 0 }],
+    43: [{ id: 44, move: 'qc', color: W, type: 0 }],
+    44: [{ id: 45, move: 'qd', color: B, type: 0 }],
+    45: [{ id: 46, move: 'pc', color: W, type: 0 }],
+    46: [{ id: 47, move: 'od', color: B, type: 0 }],
+    47: [],
+    ...extra,
+})
+const treeGetter = (tree) => async (id) => ({ id, labels: [], children: (tree[id] || []).map((c) => ({ labels: [], ...c })) })
+const START = ['pd', 'qf', 'nc', 'qc']
+
+test('pick the path: one joseki line plus lines branching off at recorded mistakes', async () => {
+    const tree = pathTree({
+        44: [{ id: 45, move: 'qd', color: B, type: 0 }, { id: 92, move: 'rd', color: B, type: 2 }], // bad
+        92: [{ id: 93, move: 'qd', color: W, type: 0 }],
+        46: [{ id: 47, move: 'od', color: B, type: 0 }, { id: 94, move: 'oc', color: B, type: 4 }], // questionable
+        94: [],
+    })
+    const problem = await generatePickPath({ startMoves: START, color: BLACK, firstTen: true, getNode: treeGetter(tree), random: sequence([0.1, 0.6, 0.3]) })
+    assert.ok(problem)
+    assert.deepEqual(problem.moves, START)
+    assert.deepEqual(problem.line.map((m) => m.move), ['qd', 'pc', 'od'])
+    assert.equal(problem.options.length, 3)
+
+    const correct = problem.options.filter((o) => !o.mistake)
+    assert.equal(correct.length, 1)
+    assert.deepEqual(correct[0].line.map((m) => m.move), ['qd', 'pc', 'od'])
+
+    const wrong = Object.fromEntries(problem.options.filter((o) => o.mistake).map((o) => [o.mistake.move, o]))
+    assert.deepEqual(wrong.rd.line.map((m) => m.move), ['rd', 'qd'])
+    assert.deepEqual(wrong.rd.mistake, { step: 0, move: 'rd', color: BLACK, type: 2 })
+    assert.deepEqual(wrong.oc.line.map((m) => m.move), ['qd', 'pc', 'oc'])
+    assert.equal(wrong.oc.mistake.type, 4)
+})
+
+test('pick the path: makes up nearby non-joseki moves when Josekipedia has no mistakes', async () => {
+    // A small seeded generator (mulberry32), so made-up moves vary between attempts
+    const seeded = (seed) => () => {
+        seed = (seed + 0x6D2B79F5) | 0
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+    for (const seed of [1, 2, 3, 42, 1234]) {
+        const problem = await generatePickPath({ startMoves: START, color: BLACK, firstTen: true, getNode: treeGetter(pathTree()), random: seeded(seed) })
+        assert.ok(problem, `expected a problem for seed ${seed}`)
+        assert.equal(problem.options.length, 3)
+        const made = problem.options.filter((o) => o.mistake)
+        assert.equal(made.length, 2)
+        for (const { line, mistake } of made) {
+            assert.equal(mistake.type, null)
+            assert.ok(mistake.step >= 1, 'replaces one of the last two moves')
+            assert.equal(line.length, mistake.step + 1)
+            const original = problem.line[mistake.step].move
+            const dx = Math.abs(mistake.move.charCodeAt(0) - original.charCodeAt(0))
+            const dy = Math.abs(mistake.move.charCodeAt(1) - original.charCodeAt(1))
+            assert.ok(dx <= 2 && dy <= 2 && mistake.move !== original, 'nearby, and not the joseki move')
+        }
+        // Every option ends in a different position
+        const [a, b, c] = problem.options.map((o) => o.position)
+        assert.ok(!a.sameStones(b) && !a.sameStones(c) && !b.sameStones(c))
+    }
+})
+
+test('pick the path: skips lines too short to be interesting', async () => {
+    const tree = pathTree({ 45: [] }) // main line is just qd
+    const problem = await generatePickPath({ startMoves: START, color: BLACK, firstTen: true, getNode: treeGetter(tree), random: sequence([0.3]) })
     assert.equal(problem, null)
 })
