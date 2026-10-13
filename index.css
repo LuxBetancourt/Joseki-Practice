@@ -260,8 +260,10 @@ kbd {
     z-index: 2;
 }
 .toast {
-    pointer-events: auto;
-    background: rgba(255, 255, 255, .95);
+    /* Click-through, so a message over the board never stops the player making a move;
+       only buttons in it (Retry, Try Again) take clicks */
+    pointer-events: none;
+    background: rgba(255, 255, 255, .88);
     color: #222;
     border-left: 4px solid var(--good);
     border-radius: 6px;
@@ -275,7 +277,7 @@ kbd {
 .toast.success { border-color: var(--ideal); }
 .toast.error { border-color: var(--bad); }
 .toast.warning { border-color: var(--trick); }
-.toast button { background: #eee; color: #222; border-color: #ccc; padding: .1em .7em; }
+.toast button { pointer-events: auto; background: #eee; color: #222; border-color: #ccc; padding: .1em .7em; }
 .toast.leaving { opacity: 0; transition: opacity .4s; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
 
