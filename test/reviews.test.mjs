@@ -17,13 +17,10 @@ function makeDeck(store = new Map()) {
 const spec = (moves, kind = 'next', color = 1, data = {}) => ({ kind, moves, color, data })
 const ALL = { kinds: ['next', 'punish', 'shape', 'path'], color: 1, startMoves: [] }
 
-test('a missed problem comes back after five minutes', () => {
-    const { deck, clock } = makeDeck()
+test('a missed problem is due for review straight away', () => {
+    const { deck } = makeDeck()
     deck.recordMiss(spec(['pd', 'qf', 'nc']))
     assert.equal(deck.size, 1)
-    clock.now += 5 * MINUTE - 1
-    assert.equal(deck.due(ALL).length, 0)
-    clock.now += 1
     assert.equal(deck.due(ALL).length, 1)
 })
 
@@ -40,7 +37,7 @@ test('correct reviews step through 1 hour, 1 day, 1 week, 1 month, 1 year', () =
     }
 })
 
-test('a miss sends a problem back to five minutes', () => {
+test('failing a review brings it back after five minutes', () => {
     const { deck, clock } = makeDeck()
     const { key } = deck.recordMiss(spec(['pd', 'qf', 'nc']))
     deck.recordSuccess(key)
@@ -58,7 +55,6 @@ test('due reviews only match the current settings', () => {
     deck.recordMiss(spec(['pd', 'qc', 'pc'], 'punish', 1))
     deck.recordMiss(spec(['qd', 'od', 'oc'], 'next', 1))
     deck.recordMiss(spec(['pd', 'qf', 'nc', 'qc'], 'next', 2))
-    clock.now += 5 * MINUTE
 
     assert.equal(deck.due(ALL).length, 3, 'black problems of any kind')
     assert.equal(deck.due({ ...ALL, color: 2 }).length, 1)
@@ -97,7 +93,6 @@ test('with no filter, every due review counts, and nextDue says when the next on
     deck.recordMiss(spec(['pd', 'qf', 'nc'], 'next', 1))
     clock.now += MINUTE
     deck.recordMiss(spec(['qd', 'od', 'oc'], 'punish', 2))
-    assert.equal(deck.nextDue(), clock.now - MINUTE + 5 * MINUTE)
-    clock.now += 5 * MINUTE
+    assert.equal(deck.nextDue(), clock.now - MINUTE)
     assert.equal(deck.due().length, 2, 'both colors and kinds')
 })

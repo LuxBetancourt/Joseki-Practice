@@ -6,9 +6,11 @@ const MINUTE = 60 * 1000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
-// How long until a problem comes back. A miss starts (or restarts) at the first step; each
-// correct review moves it one step further, staying at the last.
-export const REVIEW_STEPS = [5 * MINUTE, HOUR, DAY, 7 * DAY, 30 * DAY, 365 * DAY]
+// How long until a problem comes back. A newly missed problem is due straight away; each correct
+// review moves it one step further, staying at the last. Failing a review restarts it at the
+// first step, but only RELEARN_DELAY later rather than immediately.
+export const REVIEW_STEPS = [0, HOUR, DAY, 7 * DAY, 30 * DAY, 365 * DAY]
+export const RELEARN_DELAY = 5 * MINUTE
 
 /** Identifies the same problem across sessions: the kind and position (and target, for shapes). */
 export const reviewKey = ({ kind, moves, data }) => [kind, moves.join(''), data?.answer || ''].join(':')
@@ -31,16 +33,17 @@ export class ReviewDeck {
 
     find(key) { return this.items.find((item) => item.key === key) }
 
-    /** Adds a missed problem, or resets the schedule of one already in the deck. */
+    /** Adds a missed problem (due now), or restarts one already in the deck (due in a few minutes). */
     recordMiss(spec) {
         const key = reviewKey(spec)
         let item = this.find(key)
+        const failedReview = Boolean(item)
         if (!item) {
             item = { key, kind: spec.kind, moves: spec.moves, color: spec.color, data: spec.data, added: this.now(), lapses: 0 }
             this.items.push(item)
         }
         item.step = 0
-        item.due = this.now() + REVIEW_STEPS[0]
+        item.due = this.now() + (failedReview ? RELEARN_DELAY : REVIEW_STEPS[0])
         item.lapses += 1
         this.save()
         return item

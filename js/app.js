@@ -1,7 +1,7 @@
 import { Position, IllegalMoveError, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError } from './problems.js'
-import { ReviewDeck } from './reviews.js'
+import { ReviewDeck, reviewKey } from './reviews.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath } from './text.js'
@@ -315,7 +315,9 @@ const problemPrompt = () => {
 /** Loads a problem: in Review mode the most overdue review, in Problems mode sometimes a review. */
 async function newProblem() {
     const review = settings.mode === 'review'
-    const due = dueReviews()
+    // Problems mode shouldn't hand back the problem the player was just on (a miss is due at once)
+    const previous = problem?.spec && reviewKey(problem.spec)
+    const due = dueReviews().filter((item) => review || item.key !== previous)
     if (review && !due.length) {
         // Nothing to review: clear the board; the problem bar says when the next one is due
         ++generation
