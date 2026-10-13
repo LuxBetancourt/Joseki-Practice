@@ -96,3 +96,11 @@ test('simple ko is enforced and can be retaken after a move elsewhere', () => {
     p = p.play(10, 10).play(11, 11)
     assert.equal(p.play(1, 1).at(2, 1), EMPTY)
 })
+
+test('sameStones compares stones regardless of move order or turn', () => {
+    const a = play('pd dd pp')
+    const b = play('pp dd pd')
+    assert.ok(a.sameStones(b))
+    assert.ok(!a.sameStones(play('pd dd pq')))
+    assert.ok(a.sameStones(a.pass()))
+})

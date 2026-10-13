@@ -35,7 +35,7 @@ export class BoardView {
     constructor(svg, handlers) {
         this.svg = svg
         this.handlers = handlers
-        this.state = { position: null, lastMove: null, highlights: [], marks: [] }
+        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null }
         this.hoverPoint = null
 
         const size = SIZE - 1 + 2 * MARGIN
@@ -130,12 +130,28 @@ export class BoardView {
      *   lastMove:   {x, y} | null
      *   highlights: [{x, y, type}] candidate moves; type is a CSS class suffix
      *   marks:      [{x, y, shape}] marked points; shape is 'triangle', 'square' or 'circle'
+     *   target:     Position | null; stones it adds are drawn faded, stones it lacks are crossed out
      */
     render(state) {
         Object.assign(this.state, state)
-        const { position, lastMove, highlights, marks } = this.state
+        const { position, lastMove, highlights, marks, target } = this.state
 
         const stones = []
+        const removed = []
+        if (target) {
+            for (let y = 0; y < SIZE; ++y) {
+                for (let x = 0; x < SIZE; ++x) {
+                    const now = position.at(x, y)
+                    const later = target.at(x, y)
+                    if (later !== EMPTY && now === EMPTY) {
+                        stones.push(`<circle class="stone future ${later === BLACK ? 'black' : 'white'}" cx="${x}" cy="${y}" r="0.47"/>`)
+                    }
+                    else if (now !== EMPTY && now !== later) { // Captured (and possibly retaken by the other color)
+                        removed.push({ x, y, on: now === BLACK ? 'on-black' : 'on-white' })
+                    }
+                }
+            }
+        }
         for (let y = 0; y < SIZE; ++y) {
             for (let x = 0; x < SIZE; ++x) {
                 const color = position.at(x, y)
@@ -159,7 +175,9 @@ export class BoardView {
         this.markLayer.innerHTML = marks.map(({ x, y, shape }) => {
             const on = { [EMPTY]: 'on-empty', [BLACK]: 'on-black' }[position.at(x, y)] || 'on-white'
             return markShape(shape, x, y, `mark ${on}`)
-        }).join('')
+        }).concat(removed.map(({ x, y, on }) =>
+            `<path class="removed ${on}" d="M${x - 0.22} ${y - 0.22}L${x + 0.22} ${y + 0.22}M${x + 0.22} ${y - 0.22}L${x - 0.22} ${y + 0.22}"/>`,
+        )).join('')
 
         this.updateGhost()
     }

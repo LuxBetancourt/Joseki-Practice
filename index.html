@@ -41,10 +41,11 @@
 
     <aside id="setup" class="panel">
         <h2>Mode</h2>
-        <div class="segmented" role="radiogroup" aria-label="Mode">
+        <div class="segmented modes" role="radiogroup" aria-label="Mode">
             <input type="radio" name="mode" id="mode-practice" value="practice"><label for="mode-practice" title="Play against the computer from a starting point">Practice</label>
             <input type="radio" name="mode" id="mode-next" value="next"><label for="mode-next" title="Find the joseki move from a position partway through a joseki">Next Move</label>
             <input type="radio" name="mode" id="mode-punish" value="punish"><label for="mode-punish" title="The computer makes a mistake; find the move that punishes it">Punish</label>
+            <input type="radio" name="mode" id="mode-shape" value="shape"><label for="mode-shape" title="See the shape a joseki ends in; find the move that starts it">Final Shape</label>
         </div>
 
         <h2>Player</h2>
@@ -57,7 +58,7 @@
         <form id="start-form">
             <ul class="tree" id="starting-points">
                 <li><div class="tree-row"><span class="tree-spacer"></span><label><input type="radio" name="start" value="empty" checked>Empty Board</label></div></li>
-                <li class="practice-only" title="Play both colors freely. The computer won't respond and no joseki info is loaded.">
+                <li id="demo-option" title="Play both colors freely. The computer won't respond and no joseki info is loaded.">
                     <div class="tree-row"><span class="tree-spacer"></span><label><input type="radio" name="start" value="demo">Demo Board</label></div>
                 </li>
             </ul>

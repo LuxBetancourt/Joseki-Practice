@@ -427,3 +427,10 @@ body:not([data-mode="practice"]) .practice-only { display: none; }
 .goban .ring.good { stroke: var(--good); }
 .coord-ref .shape-symbol { font-size: .85em; margin-right: .1em; }
 .tree-row label { display: flex; align-items: baseline; gap: .3em; }
+.goban .stone.future { opacity: .4; }
+.goban .stone.future.white { stroke: rgba(0, 0, 0, .5); stroke-dasharray: .08 .06; }
+.goban .removed { fill: none; stroke-width: .1; stroke-linecap: round; }
+.goban .removed.on-black { stroke: #fff; }
+.goban .removed.on-white { stroke: #000; }
+.segmented.modes { display: grid; grid-template-columns: 1fr 1fr; }
+.tree-row label:has(input:disabled) { opacity: .45; cursor: help; }

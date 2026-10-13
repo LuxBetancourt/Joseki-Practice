@@ -158,6 +158,11 @@ export class Position {
         return point ? this.play(point.x, point.y, color) : this.pass(color)
     }
 
+    /** True if both positions have the same stones (ignoring whose turn it is). */
+    sameStones(other) {
+        return this.stones.every((color, i) => color === other.stones[i])
+    }
+
     isLegal(x, y, color = this.toPlay) {
         try {
             this.play(x, y, color)

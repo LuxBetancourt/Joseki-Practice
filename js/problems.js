@@ -4,10 +4,13 @@
 import { Position, PASS, fromSgf, opponent } from './go.js'
 import { ROOT_ID, MoveType } from './josekipedia.js'
 import { CLASSIC_OPENINGS } from './starting-points.js'
+import { mainLine } from './lines.js'
 
 const MAX_TARGET_DEPTH = 12
 const MAX_DEPTH = 30
 const MAX_MISTAKES_CHECKED = 6
+const MAX_SHAPE_CANDIDATES = 3
+const MAX_SHAPE_LINE = 10 // Longer targets are too much to picture at once
 const MIN_MOVES = 3 // Skip trivial positions like answering the very first approach
 
 const isLegal = (position, child) => {
@@ -30,6 +33,10 @@ function answerTypes(node, color) {
 }
 
 const pick = (items, random) => items[Math.floor(random() * items.length)]
+const shuffle = (items, random) => items
+    .map((item) => ({ item, key: random() }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ item }) => item)
 
 /** Replays a starting path from the root; returns the walk state at its end. */
 async function replay(moves, getNode) {
@@ -110,6 +117,34 @@ export async function generatePunish({ startMoves, color, firstTen, getNode, ran
         const answers = answerTypes(after.node, color)
         if ([...answers.values()].includes(MoveType.IDEAL)) {
             return { moves: after.moves, answers, mistake: { move: mistake.move, type: mistake.type } }
+        }
+    }
+    return null
+}
+
+/**
+ * "Final shape" problem: a position where `color` is to play, plus the shape the joseki ends in
+ * after one of their joseki moves. The player must find the move that starts the line, so the
+ * line needs at least two of their stones (otherwise the answer would be the only one shown), and
+ * at most MAX_SHAPE_LINE moves.
+ * Returns { moves, answers, answer, line: [{ move, color }], target: Position } or null.
+ */
+export async function generateFinalShape({ startMoves, color, firstTen, getNode, random = Math.random }) {
+    let chosen = null
+    await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
+        const suitable = state.position.toPlay === color && state.moves.length >= MIN_MOVES
+            && josekiMoves(state.node, state.position, firstTen).length >= 2
+        if (suitable) { chosen = state }
+        return suitable
+    })
+    if (!chosen) { return null }
+
+    for (const child of shuffle(josekiMoves(chosen.node, chosen.position, firstTen), random).slice(0, MAX_SHAPE_CANDIDATES)) {
+        const after = await step(chosen, child, getNode)
+        const rest = await mainLine({ node: after.node, position: after.position, getNode })
+        const line = [{ move: child.move, color: child.color }, ...rest.moves]
+        if (line.length <= MAX_SHAPE_LINE && line.filter((m) => m.color === color).length >= 2) {
+            return { moves: chosen.moves, answers: answerTypes(chosen.node, color), answer: child.move, line, target: rest.position }
         }
     }
     return null

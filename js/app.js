@@ -1,6 +1,6 @@
 import { Position, IllegalMoveError, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
-import { generateNextMove, generatePunish } from './problems.js'
+import { generateNextMove, generatePunish, generateFinalShape } from './problems.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath } from './text.js'
@@ -65,11 +65,19 @@ let busy = false
 // Bumped whenever the game is navigated; async work started earlier checks it and bails out.
 let generation = 0
 
-// The active problem in "next" / "punish" mode: the player must answer at history[index].
+// The active problem in "next" / "punish" / "shape" mode: the player must answer at history[index].
 //   answers: Map of coord -> move type for every move Josekipedia knows there
 //   mistake: { move, type } for punish problems
+//   answer, line, target: for shape problems, the move that starts the line, the line itself and
+//                         the final position it reaches
 let problem = null
-const stats = { next: { solved: 0, attempted: 0 }, punish: { solved: 0, attempted: 0 } } // This session's score per mode
+const stats = { // This session's score per mode
+    next: { solved: 0, attempted: 0 },
+    punish: { solved: 0, attempted: 0 },
+    shape: { solved: 0, attempted: 0 },
+}
+const GENERATORS = { next: generateNextMove, punish: generatePunish, shape: generateFinalShape }
+let statusNote = '' // Shown in the status line while busy, when set
 const problemPending = () => problem && !problem.solved && !problem.revealed
 
 const currentEntry = () => history[current]
@@ -140,6 +148,7 @@ function playMove(coord, { byHuman }) {
 // --- Problems ------------------------------------------------------------------
 
 function gradeAnswer(coord) {
+    if (problem.kind === 'shape') { return gradeShapeAnswer(coord) }
     const type = problem.answers.get(coord)
     const score = stats[problem.kind]
     if (++problem.attempts === 1) { ++score.attempted }
@@ -153,12 +162,76 @@ function gradeAnswer(coord) {
         return
     }
 
-    let message = 'That move isn’t in Josekipedia here.'
+    let message = moveTypeMessage(type)
     if (type === MoveType.GOOD) { message = 'Playable, but there’s a stronger punishment.' }
-    else if (MOVE_TYPE_NAMES[type]) { message = `That’s a ${MOVE_TYPE_NAMES[type] === 'question' ? 'questionable' : MOVE_TYPE_NAMES[type]} move.` }
     toast(`${message} Try again.`, 'error')
+    takeBackWrongAnswer()
+}
 
-    // Show the wrong move briefly, then take it back
+const moveTypeMessage = (type) => (MOVE_TYPE_NAMES[type]
+    ? `That’s a ${MOVE_TYPE_NAMES[type] === 'question' ? 'questionable' : MOVE_TYPE_NAMES[type]} move.`
+    : 'That move isn’t in Josekipedia here.')
+
+/**
+ * Shape problems accept the move that starts the target line, or any other joseki move whose own
+ * main line reaches the same final position.
+ */
+async function gradeShapeAnswer(coord) {
+    const score = stats.shape
+    if (++problem.attempts === 1) { ++score.attempted }
+    const gen = generation
+    const start = history[problem.index]
+    const type = problem.answers.get(coord)
+
+    let rest = coord === problem.answer ? problem.line.slice(1) : null
+    if (!rest && (type === MoveType.IDEAL || type === MoveType.GOOD)) {
+        setBusy(true)
+        try {
+            const child = start.node.children.find((c) => c.move === coord && c.color === humanColor())
+            const line = await lineAfter(child, start.position)
+            if (line.position.sameStones(problem.target)) { rest = line.moves }
+        }
+        catch { /* Couldn't check for a transposition; treat it as a different shape */ }
+        if (gen !== generation) { return }
+    }
+
+    if (rest) {
+        problem.solved = true
+        if (problem.attempts === 1) { ++score.solved }
+        toast(coord === problem.answer ? '✓✓ Correct! Here’s how it continues.' : '✓✓ Correct! (A different move order to the same shape.)', 'success')
+        playOut(rest)
+        return
+    }
+
+    const point = fromSgf(coord)
+    let message = moveTypeMessage(type)
+    if (point && problem.target.at(point.x, point.y) === humanColor()) { message = 'That stone is part of the shape, but it isn’t played first.' }
+    else if (type === MoveType.IDEAL || type === MoveType.GOOD) { message = 'That’s joseki, but it leads to a different shape.' }
+    toast(`${message} Try again.`, 'error')
+    takeBackWrongAnswer()
+}
+
+/** Plays `moves` onto the board one at a time, so the player can follow the sequence. */
+async function playOut(moves) {
+    const gen = generation
+    statusNote = 'Playing out the joseki…'
+    setBusy(true)
+    for (const { move, color } of moves) {
+        await delay(550)
+        if (gen !== generation) { break }
+        const entry = currentEntry()
+        pushEntry({ position: entry.position.playSgf(move, color), move: { coord: move, color }, node: undefined, path: entry.path + move })
+        render()
+    }
+    statusNote = ''
+    if (gen !== generation) { return }
+    try { await resolveNode(current) } // Load the final move's comment
+    catch { /* The move info will say it couldn't be found */ }
+    if (gen === generation) { setBusy(false) }
+}
+
+/** Shows a wrong answer briefly, then takes it back. */
+function takeBackWrongAnswer() {
     const gen = generation
     setBusy(true)
     setTimeout(() => {
@@ -181,6 +254,7 @@ function revealAnswer() {
 const problemPrompt = () => {
     const you = capitalize(colorName(humanColor()))
     if (problem.kind === 'next') { return `${you} to play. Find the joseki move.` }
+    if (problem.kind === 'shape') { return `${you} to play. The faded stones show where the joseki ends up. Find the move that starts it.` }
     const { move, type } = problem.mistake
     const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
     const where = sgfToDisplay(move)
@@ -203,8 +277,8 @@ async function newProblem() {
         const kind = settings.mode
         // Random lines often end early in tenuki, so try a few before giving up
         let found = null
-        for (let attempt = 0; attempt < 3 && !found && gen === generation; ++attempt) {
-            found = await (kind === 'next' ? generateNextMove(options) : generatePunish(options))
+        for (let attempt = 0; attempt < 5 && !found && gen === generation; ++attempt) {
+            found = await GENERATORS[kind](options)
         }
         if (gen !== generation) { return }
         if (!found) {
@@ -213,7 +287,7 @@ async function newProblem() {
             return
         }
         setupPosition(found.moves)
-        problem = { kind, index: current, answers: found.answers, mistake: found.mistake, attempts: 0, solved: false, revealed: false }
+        problem = { ...found, kind, index: current, attempts: 0, solved: false, revealed: false }
         ++generation
         advance()
     }
@@ -424,15 +498,23 @@ function render() {
     const toHighlight = (move, type) => ({ ...fromSgf(move), type: MOVE_TYPE_NAMES[type] || 'unknown' })
     let highlights = []
     if (problem?.revealed && current === problem.index) {
-        const accepted = problem.kind === 'next' ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
-        highlights = [...problem.answers].filter(([, type]) => accepted.includes(type)).map(([move, type]) => toHighlight(move, type))
+        if (problem.kind === 'shape') {
+            highlights = [toHighlight(problem.answer, MoveType.IDEAL)]
+        }
+        else {
+            const accepted = problem.kind === 'next' ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
+            highlights = [...problem.answers].filter(([, type]) => accepted.includes(type)).map(([move, type]) => toHighlight(move, type))
+        }
     }
     else if (settings.showMoves && entry.node?.children && !problemPending()) {
         highlights = entry.node.children
             .filter((child) => child.color === position.toPlay)
             .map((child) => toHighlight(child.move, child.type))
     }
-    view.render({ position, lastMove, highlights: highlights.filter((h) => h.x !== undefined), marks: currentMarks() })
+    // The faded target stays up while a wrong answer is briefly shown
+    const showTarget = problem?.kind === 'shape' && ((problemPending() && current >= problem.index) || (problem.revealed && current === problem.index))
+    const target = showTarget ? problem.target : null
+    view.render({ position, lastMove, highlights: highlights.filter((h) => h.x !== undefined), marks: currentMarks(), target })
 
     $('#undo').disabled = current === 0
     $('#redo').disabled = current === history.length - 1
@@ -441,8 +523,9 @@ function render() {
     const toPlay = capitalize(colorName(position.toPlay))
     const showingWrongAnswer = problemPending() && current > problem.index
     $('#status').textContent = showingWrongAnswer ? '' : busy
-        ? (problem || settings.mode === 'practice' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
-        : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
+        ? statusNote || (problem || settings.mode === 'practice' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
+        : problem?.kind === 'shape' && problem.solved && !isHumanTurn() ? '' // The joseki is complete
+            : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
 
     renderProblemBar()
     renderMoveInfo(entry)
@@ -545,8 +628,8 @@ function renderProblemBar() {
 
     let prompt = ''
     if (problemPending()) { prompt = problemPrompt() }
-    else if (problem?.solved) { prompt = 'Solved! Keep playing, or get a new problem.' }
-    else if (problem?.revealed) { prompt = 'Answers are highlighted.' }
+    else if (problem?.solved) { prompt = problem.kind === 'shape' ? 'Solved! That’s the final shape.' : 'Solved! Keep playing, or get a new problem.' }
+    else if (problem?.revealed) { prompt = problem.kind === 'shape' ? 'The answer is highlighted.' : 'Answers are highlighted.' }
     else if (!problem && !busy) { prompt = 'No problem loaded. Try again, or choose another starting point.' }
     $('#problem-prompt').textContent = prompt
     $('#show-answer').disabled = !problemPending() || busy
@@ -825,8 +908,21 @@ function bindControls() {
 
 /** Shows the controls for the current mode. */
 function applyMode() {
+    const practice = settings.mode === 'practice'
     document.body.dataset.mode = settings.mode
-    $('#start').textContent = settings.mode === 'practice' ? 'Start' : 'New Problem'
+    $('#start').textContent = practice ? 'Start' : 'New Problem'
+
+    // The demo board has no joseki data, so there's nothing to make problems from
+    const demo = $('input[name="start"][value="demo"]')
+    demo.disabled = !practice
+    $('#demo-option').title = practice
+        ? 'Play both colors freely. The computer won’t respond and no joseki info is loaded.'
+        : 'Only available in Practice mode. Problems need joseki data, which the demo board doesn’t load.'
+    if (!practice && demo.checked) {
+        $('input[name="start"][value="empty"]').checked = true
+        settings.start = 'empty'
+        saveSettings()
+    }
 }
 
 /** Starts a practice game or a problem, depending on the mode. */
