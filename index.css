@@ -364,7 +364,11 @@ label { cursor: pointer; }
 
 /* --- Modes & problems ------------------------------------------------------ */
 
-body:not([data-mode="practice"]) .practice-only { display: none; }
+body:not([data-mode="explore"]) .explore-only { display: none; }
+body:not([data-mode="problems"]) .problems-only { display: none; }
+#problem-types { margin-top: .5rem; }
+#problem-kind { flex: none; font-size: .78rem; }
+#problem-kind[hidden] { display: none; }
 .segmented label { white-space: nowrap; }
 
 #problem-bar {
@@ -432,5 +436,4 @@ body:not([data-mode="practice"]) .practice-only { display: none; }
 .goban .removed { fill: none; stroke-width: .1; stroke-linecap: round; }
 .goban .removed.on-black { stroke: #fff; }
 .goban .removed.on-white { stroke: #000; }
-.segmented.modes { display: grid; grid-template-columns: 1fr 1fr; }
 .tree-row label:has(input:disabled) { opacity: .45; cursor: help; }

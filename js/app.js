@@ -13,7 +13,8 @@ const $ = (selector) => document.querySelector(selector)
 // --- Settings ------------------------------------------------------------------
 
 const DEFAULT_SETTINGS = {
-    mode: 'practice', // 'practice' | 'next' | 'punish'
+    mode: 'explore', // 'explore' | 'problems'
+    problemTypes: { next: true, punish: true, shape: true },
     player: 'black',
     ideal: true, good: false, bad: false, trick: false, question: false,
     firstTen: true,
@@ -28,7 +29,12 @@ const DEFAULT_SETTINGS = {
 function loadSettings() {
     try {
         const saved = JSON.parse(localStorage.getItem('settings'))
-        if (saved) { return { ...DEFAULT_SETTINGS, ...saved } }
+        if (saved) {
+            // Next Move, Punish and Final Shape used to be separate modes, and Explore was Practice
+            if (['next', 'punish', 'shape'].includes(saved.mode)) { saved.mode = 'problems' }
+            if (saved.mode === 'practice') { saved.mode = 'explore' }
+            return { ...DEFAULT_SETTINGS, ...saved, problemTypes: { ...DEFAULT_SETTINGS.problemTypes, ...saved.problemTypes } }
+        }
 
         // Migrate settings saved by the previous version of the site
         const legacy = {}
@@ -65,7 +71,8 @@ let busy = false
 // Bumped whenever the game is navigated; async work started earlier checks it and bails out.
 let generation = 0
 
-// The active problem in "next" / "punish" / "shape" mode: the player must answer at history[index].
+// The active problem in Problems mode: the player must answer at history[index].
+//   kind: 'next' | 'punish' | 'shape'
 //   answers: Map of coord -> move type for every move Josekipedia knows there
 //   mistake: { move, type } for punish problems
 //   answer, line, target: for shape problems, the move that starts the line, the line itself and
@@ -77,6 +84,8 @@ const stats = { // This session's score per mode
     shape: { solved: 0, attempted: 0 },
 }
 const GENERATORS = { next: generateNextMove, punish: generatePunish, shape: generateFinalShape }
+const PROBLEM_TYPE_NAMES = { next: 'Next Move', punish: 'Punish', shape: 'Final Shape' }
+const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => settings.problemTypes[kind])
 let statusNote = '' // Shown in the status line while busy, when set
 const problemPending = () => problem && !problem.solved && !problem.revealed
 
@@ -158,7 +167,7 @@ function gradeAnswer(coord) {
         problem.solved = true
         if (problem.attempts === 1) { ++score.solved }
         toast(type === MoveType.IDEAL ? '✓✓ Correct!' : '✓ Correct (a good move).', 'success')
-        advance() // The computer replies and play continues as practice
+        advance() // The computer replies and play continues as in Explore mode
         return
     }
 
@@ -274,10 +283,13 @@ async function newProblem() {
     const start = settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start
     const options = { startMoves: splitPath(start), color: humanColor(), firstTen: settings.firstTen, getNode }
     try {
-        const kind = settings.mode
-        // Random lines often end early in tenuki, so try a few before giving up
+        // Pick a random enabled type for each attempt. Random lines often end early in tenuki,
+        // so try a few times (and other types) before giving up.
+        const kinds = enabledProblemTypes()
         let found = null
+        let kind = null
         for (let attempt = 0; attempt < 5 && !found && gen === generation; ++attempt) {
+            kind = kinds[Math.floor(Math.random() * kinds.length)]
             found = await GENERATORS[kind](options)
         }
         if (gen !== generation) { return }
@@ -523,7 +535,7 @@ function render() {
     const toPlay = capitalize(colorName(position.toPlay))
     const showingWrongAnswer = problemPending() && current > problem.index
     $('#status').textContent = showingWrongAnswer ? '' : busy
-        ? statusNote || (problem || settings.mode === 'practice' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
+        ? statusNote || (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
         : problem?.kind === 'shape' && problem.solved && !isHumanTurn() ? '' // The joseki is complete
             : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
 
@@ -622,9 +634,12 @@ function followUpCard(child, position, key) {
 }
 
 function renderProblemBar() {
-    const inProblemMode = settings.mode !== 'practice'
+    const inProblemMode = settings.mode !== 'explore'
     $('#problem-bar').hidden = !inProblemMode
     if (!inProblemMode) { return }
+
+    $('#problem-kind').textContent = problem ? PROBLEM_TYPE_NAMES[problem.kind] : ''
+    $('#problem-kind').hidden = !problem
 
     let prompt = ''
     if (problemPending()) { prompt = problemPrompt() }
@@ -633,8 +648,14 @@ function renderProblemBar() {
     else if (!problem && !busy) { prompt = 'No problem loaded. Try again, or choose another starting point.' }
     $('#problem-prompt').textContent = prompt
     $('#show-answer').disabled = !problemPending() || busy
-    const score = stats[settings.mode]
-    $('#score').textContent = score.attempted ? `${score.solved} / ${score.attempted} solved first try` : ''
+    const kinds = Object.keys(stats)
+    const solved = kinds.reduce((sum, kind) => sum + stats[kind].solved, 0)
+    const attempted = kinds.reduce((sum, kind) => sum + stats[kind].attempted, 0)
+    $('#score').textContent = attempted ? `${solved} / ${attempted} solved first try` : ''
+    $('#score').title = kinds
+        .filter((kind) => stats[kind].attempted)
+        .map((kind) => `${PROBLEM_TYPE_NAMES[kind]}: ${stats[kind].solved} / ${stats[kind].attempted}`)
+        .join('\n')
 }
 
 function renderMoveInfo(entry) {
@@ -861,7 +882,7 @@ function bindControls() {
         input.addEventListener('change', () => {
             settings.player = input.value
             saveSettings()
-            if (settings.mode !== 'practice') { return newProblem() }
+            if (settings.mode !== 'explore') { return newProblem() }
             ++generation
             advance() // The computer moves if it's now its turn
         })
@@ -877,6 +898,19 @@ function bindControls() {
         })
     }
     applyMode()
+
+    for (const input of document.querySelectorAll('[data-problem-type]')) {
+        const kind = input.dataset.problemType
+        input.checked = settings.problemTypes[kind]
+        input.addEventListener('change', () => {
+            settings.problemTypes[kind] = input.checked
+            if (!enabledProblemTypes().length) {
+                settings.problemTypes[kind] = input.checked = true
+                toast('Keep at least one problem type selected.', 'warning')
+            }
+            saveSettings()
+        })
+    }
     $('#show-answer').addEventListener('click', revealAnswer)
     $('#next-problem').addEventListener('click', newProblem)
 
@@ -896,7 +930,7 @@ function bindControls() {
             ArrowLeft: undo,
             ArrowRight: redo,
             h: () => $('[data-setting="showMoves"]').click(),
-            n: () => { if (settings.mode !== 'practice') { newProblem() } },
+            n: () => { if (settings.mode !== 'explore') { newProblem() } },
         }
         const action = actions[e.key]
         if (action) {
@@ -908,26 +942,26 @@ function bindControls() {
 
 /** Shows the controls for the current mode. */
 function applyMode() {
-    const practice = settings.mode === 'practice'
+    const explore = settings.mode === 'explore'
     document.body.dataset.mode = settings.mode
-    $('#start').textContent = practice ? 'Start' : 'New Problem'
+    $('#start').textContent = explore ? 'Start' : 'New Problem'
 
     // The demo board has no joseki data, so there's nothing to make problems from
     const demo = $('input[name="start"][value="demo"]')
-    demo.disabled = !practice
-    $('#demo-option').title = practice
+    demo.disabled = !explore
+    $('#demo-option').title = explore
         ? 'Play both colors freely. The computer won’t respond and no joseki info is loaded.'
-        : 'Only available in Practice mode. Problems need joseki data, which the demo board doesn’t load.'
-    if (!practice && demo.checked) {
+        : 'Only available in Explore mode. Problems need joseki data, which the demo board doesn’t load.'
+    if (!explore && demo.checked) {
         $('input[name="start"][value="empty"]').checked = true
         settings.start = 'empty'
         saveSettings()
     }
 }
 
-/** Starts a practice game or a problem, depending on the mode. */
+/** Starts a game against the computer or a problem, depending on the mode. */
 function begin() {
-    if (settings.mode === 'practice') {
+    if (settings.mode === 'explore') {
         startGame(settings.start)
     }
     else {

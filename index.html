@@ -27,6 +27,7 @@
             <button type="button" id="pass" title="Pass / tenuki">Pass</button>
         </div>
         <div id="problem-bar" hidden>
+            <span id="problem-kind" class="tag" hidden></span>
             <span id="problem-prompt"></span>
             <span id="score"></span>
             <button type="button" id="show-answer">Show Answer</button>
@@ -41,12 +42,15 @@
 
     <aside id="setup" class="panel">
         <h2>Mode</h2>
-        <div class="segmented modes" role="radiogroup" aria-label="Mode">
-            <input type="radio" name="mode" id="mode-practice" value="practice"><label for="mode-practice" title="Play against the computer from a starting point">Practice</label>
-            <input type="radio" name="mode" id="mode-next" value="next"><label for="mode-next" title="Find the joseki move from a position partway through a joseki">Next Move</label>
-            <input type="radio" name="mode" id="mode-punish" value="punish"><label for="mode-punish" title="The computer makes a mistake; find the move that punishes it">Punish</label>
-            <input type="radio" name="mode" id="mode-shape" value="shape"><label for="mode-shape" title="See the shape a joseki ends in; find the move that starts it">Final Shape</label>
+        <div class="segmented" role="radiogroup" aria-label="Mode">
+            <input type="radio" name="mode" id="mode-explore" value="explore"><label for="mode-explore" title="Play against the computer from a starting point">Explore</label>
+            <input type="radio" name="mode" id="mode-problems" value="problems"><label for="mode-problems" title="Solve problems taken from the selected starting point">Problems</label>
         </div>
+        <ul class="plain problems-only" id="problem-types" aria-label="Problem types">
+            <li title="Find the joseki move from a position partway through a joseki."><label><input type="checkbox" data-problem-type="next"> Next Move</label></li>
+            <li title="The computer makes a mistake or plays a trick move; find the move that punishes it."><label><input type="checkbox" data-problem-type="punish"> Punish</label></li>
+            <li title="Faded stones show the shape a joseki ends in; find the move that starts it."><label><input type="checkbox" data-problem-type="shape"> Final Shape</label></li>
+        </ul>
 
         <h2>Player</h2>
         <div class="segmented" role="radiogroup" aria-label="Play as">
@@ -67,8 +71,8 @@
     </aside>
 
     <aside id="options" class="panel">
-        <h2 class="practice-only">Computer Plays</h2>
-        <ul class="plain practice-only">
+        <h2 class="explore-only">Computer Plays</h2>
+        <ul class="plain explore-only">
             <li><label><input type="checkbox" data-setting="ideal"> <span class="swatch ideal"></span>Ideal moves</label></li>
             <li><label><input type="checkbox" data-setting="good"> <span class="swatch good"></span>Good moves</label></li>
             <li><label><input type="checkbox" data-setting="bad"> <span class="swatch bad"></span>Bad moves</label></li>
