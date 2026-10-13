@@ -7,7 +7,7 @@ const STAR_POINTS = [3, 9, 15].flatMap((x) => [3, 9, 15].map((y) => [x, y]))
 const MARGIN = 1.6
 
 /** SVG for a traditional point marker ('triangle' | 'square' | 'circle') centered on (x, y). */
-function markShape(shape, x, y, className) {
+export function markShape(shape, x, y, className) {
     if (shape === 'triangle') {
         const r = 0.34
         const points = [[x, y - r], [x + r * 0.866, y + r / 2], [x - r * 0.866, y + r / 2]]

@@ -1,11 +1,11 @@
-import { Position, IllegalMoveError, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
+import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError } from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath } from './text.js'
-import { BoardView } from './board-view.js'
+import { BoardView, markShape } from './board-view.js'
 import { JOSEKI, FUSEKI, CLASSIC_OPENINGS } from './starting-points.js'
 import { JOSEKIPEDIA_URL } from './config.js'
 
@@ -619,7 +619,29 @@ function currentMarks() {
 
 function setHoverMark(coord) {
     marks.hover = coord
+    showMarks()
+}
+
+/** Draws the marks on the board, and on the starting position card when the board is hidden. */
+function showMarks() {
     view.render({ marks: currentMarks() })
+    renderPathStartMarks()
+}
+
+function renderPathStartMarks() {
+    const svg = $('#path-choices:not([hidden]) .path-start svg')
+    if (!svg) { return }
+    let layer = svg.querySelector('.marks')
+    if (!layer) {
+        layer = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+        layer.setAttribute('class', 'marks')
+        svg.append(layer)
+    }
+    const position = history[problem.index].position
+    layer.innerHTML = currentMarks().map(({ x, y, shape }) => {
+        const on = { [EMPTY]: 'on-empty', [BLACK]: 'on-black' }[position.at(x, y)] || 'on-white'
+        return markShape(shape, x, y, `mark ${on}`)
+    }).join('')
 }
 
 function togglePinnedMark(coord) {
@@ -629,7 +651,7 @@ function togglePinnedMark(coord) {
         ref.classList.toggle('pinned', marks.pinned.has(coord))
         ref.setAttribute('aria-pressed', marks.pinned.has(coord))
     }
-    view.render({ marks: currentMarks() })
+    showMarks()
 }
 
 function render() {
@@ -692,6 +714,7 @@ function render() {
     renderReviewStatus()
     updateUrl(entry)
     renderPathChoices()
+    renderPathStartMarks()
     renderMoveInfo(entry)
     renderFollowUps(entry)
 }
