@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
     showMoves: false,
     showMoveInfo: true,
     showFollowUps: false,
+    autoAdvance: false, // Go to the next problem automatically after solving one
     expanded: [], // Starting-point branches the player has expanded
     start: 'empty',
 }
@@ -198,6 +199,7 @@ function gradeAnswer(coord) {
         if (problem.attempts === 1) { ++score.solved }
         toast(type === MoveType.IDEAL ? '✓✓ Correct!' : '✓ Correct (a good move).', 'success')
         advance() // The computer replies and play continues as in Explore mode
+        autoAdvanceAfterSolving()
         return
     }
 
@@ -283,6 +285,7 @@ async function continueShape() {
             recordFirstAttempt(true)
         }
         toast(problem.missed ? 'That’s the final shape.' : '✓✓ That’s the final shape!', 'success')
+        autoAdvanceAfterSolving()
     }
     try { await resolveNode(current) } // Load the move info
     catch { /* The move info will say it couldn't be found */ }
@@ -301,6 +304,18 @@ function takeBackWrongAnswer() {
         ++generation
         setBusy(false)
     }, 1200)
+}
+
+const AUTO_ADVANCE_DELAY = 1800 // Long enough to see the feedback (and the computer's reply)
+
+/** With Auto-advance on, moves on to the next problem shortly after this one is solved. */
+function autoAdvanceAfterSolving() {
+    if (!settings.autoAdvance) { return }
+    const solved = problem
+    setTimeout(() => {
+        // Skip if the player has already moved on (Next, a mode change…) or turned it off
+        if (problem === solved && settings.autoAdvance && settings.mode !== 'explore') { newProblem() }
+    }, AUTO_ADVANCE_DELAY)
 }
 
 function revealAnswer() {
@@ -765,6 +780,7 @@ function gradePath(i) {
         if (problem.attempts === 1) { ++score.solved }
         toast('✓✓ Correct! That’s the joseki.', 'success')
         render()
+        autoAdvanceAfterSolving()
         return
     }
     problem.wrong.push(i)
@@ -875,7 +891,9 @@ function renderProblemBar() {
     let prompt = ''
     if (problemPending()) { prompt = problemPrompt() }
     else if (problem?.solved) {
-        prompt = { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.' }[problem.kind] || 'Solved! Keep playing, or get a new problem.'
+        prompt = settings.autoAdvance
+            ? 'Solved! Next problem coming up…'
+            : { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.' }[problem.kind] || 'Solved! Keep playing, or get a new problem.'
     }
     else if (problem?.revealed) { prompt = 'Answers are highlighted.' }
     else if (!problem && !busy) {

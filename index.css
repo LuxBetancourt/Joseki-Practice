@@ -507,6 +507,7 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
 
 body:not([data-mode="review"]) .review-only { display: none; }
 body[data-mode="review"] .not-review { display: none; }
+body[data-mode="explore"] .not-explore { display: none; }
 #review-summary { margin: .6rem 0 0; color: var(--muted); font-size: .85rem; }
 #manage-reviews {
     display: block;
@@ -552,3 +553,4 @@ body[data-mode="review"] .not-review { display: none; }
     vector-effect: non-scaling-stroke;
     shape-rendering: crispEdges;
 }
+body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First heading in Review mode */
