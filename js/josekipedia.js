@@ -54,39 +54,55 @@ function normalizeFull(raw) {
 }
 
 // --- Caching -----------------------------------------------------------------
-// Nodes are kept in memory for the session and in localStorage across visits,
-// which makes replaying starting points and revisiting variations instant.
+// To put as little load on Josekipedia as possible, every node is kept: in memory for the visit,
+// and in IndexedDB (far roomier than localStorage) for STORAGE_TTL. The proxy caches them too.
 
-const STORAGE_PREFIX = 'jp-node:v1:'
-const STORAGE_TTL = 7 * 24 * 60 * 60 * 1000
+const STORAGE_TTL = 180 * 24 * 60 * 60 * 1000 // Joseki data rarely changes
+const LEGACY_PREFIX = 'jp-node:v1:' // The old localStorage cache, cleared out on first use
 const memory = new Map() // id -> Promise<node>
+let database = null
 
-function readStorage(id) {
+/** The IndexedDB database, or a rejected promise where it's unavailable (e.g. some private modes). */
+function openDatabase() {
+    database ??= new Promise((resolve, reject) => {
+        const request = indexedDB.open('joseki-practice', 1)
+        request.onupgradeneeded = () => request.result.createObjectStore('nodes')
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+    })
+    database.then(clearLegacyCache, () => {})
+    return database
+}
+
+function clearLegacyCache() {
     try {
-        const stored = JSON.parse(localStorage.getItem(STORAGE_PREFIX + id))
+        Object.keys(localStorage).filter((key) => key.startsWith(LEGACY_PREFIX)).forEach((key) => localStorage.removeItem(key))
+    }
+    catch { /* storage unavailable */ }
+}
+
+/** Runs one request against the nodes store; resolves with its result. */
+async function inStore(mode, use) {
+    const db = await openDatabase()
+    return new Promise((resolve, reject) => {
+        const request = use(db.transaction('nodes', mode).objectStore('nodes'))
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+    })
+}
+
+async function readStorage(id) {
+    try {
+        const stored = await inStore('readonly', (store) => store.get(id))
         if (stored && Date.now() - stored.t < STORAGE_TTL) { return stored.raw }
     }
-    catch { /* storage unavailable or corrupt */ }
+    catch { /* storage unavailable */ }
     return null
 }
 
 function writeStorage(id, raw) {
-    const value = JSON.stringify({ t: Date.now(), raw })
-    try {
-        localStorage.setItem(STORAGE_PREFIX + id, value)
-    }
-    catch {
-        // Probably over quota: drop the oldest half of the cache and try once more.
-        try {
-            const entries = Object.keys(localStorage)
-                .filter((key) => key.startsWith(STORAGE_PREFIX))
-                .map((key) => ({ key, t: JSON.parse(localStorage.getItem(key))?.t || 0 }))
-                .sort((a, b) => a.t - b.t)
-            entries.slice(0, Math.ceil(entries.length / 2)).forEach(({ key }) => localStorage.removeItem(key))
-            localStorage.setItem(STORAGE_PREFIX + id, value)
-        }
-        catch { /* give up on persistence; memory cache still works */ }
-    }
+    inStore('readwrite', (store) => store.put({ t: Date.now(), raw }, id))
+        .catch(() => { /* storage unavailable or full: the memory cache still works */ })
 }
 
 async function download(id) {
@@ -102,13 +118,12 @@ async function download(id) {
 /** Returns a promise for the full node (including children). Failed requests aren't cached. */
 export function getNode(id) {
     if (!memory.has(id)) {
-        const stored = readStorage(id)
-        const promise = stored
-            ? Promise.resolve(normalizeFull(stored))
-            : download(id).then((raw) => {
-                writeStorage(id, raw)
-                return normalizeFull(raw)
-            })
+        const promise = readStorage(id).then(async (stored) => {
+            if (stored) { return normalizeFull(stored) }
+            const raw = await download(id)
+            writeStorage(id, raw)
+            return normalizeFull(raw)
+        })
         promise.catch(() => memory.delete(id))
         memory.set(id, promise)
     }
