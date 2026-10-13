@@ -326,3 +326,26 @@ label { cursor: pointer; }
     border-bottom: 1px dotted currentColor;
     cursor: default;
 }
+
+/* --- Modes & problems ------------------------------------------------------ */
+
+body:not([data-mode="practice"]) .practice-only { display: none; }
+.segmented label { white-space: nowrap; }
+
+#problem-bar {
+    width: min(100%, calc(100vh - 9rem), 760px);
+    min-width: 280px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem .6rem;
+    margin-bottom: .5rem;
+    padding: .5rem .75rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+#problem-bar[hidden] { display: none; }
+#problem-prompt { flex: 1; font-weight: 600; min-width: 12em; }
+#score { color: var(--muted); font-size: .85rem; }
+#problem-bar button.primary { padding: .3em 1.2em; }

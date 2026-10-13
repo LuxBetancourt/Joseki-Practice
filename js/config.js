@@ -4,7 +4,7 @@
 //   - in production, proxy/cloudflare-worker.js (see the comment at its top)
 const PRODUCTION_NODE_URL = 'https://joseki-proxy.josekipractice.workers.dev/api/node/{id}'
 
-const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
+const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(globalThis.location?.hostname)
 export const NODE_URL = isLocal ? 'api/node/{id}' : PRODUCTION_NODE_URL
 
 export const JOSEKIPEDIA_URL = 'https://www.josekipedia.com/'

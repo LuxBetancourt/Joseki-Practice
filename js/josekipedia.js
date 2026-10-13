@@ -46,6 +46,13 @@ function normalize(raw) {
     return node
 }
 
+/** A fully loaded node always has `children`; Josekipedia omits `_children` at the end of a line. */
+function normalizeFull(raw) {
+    const node = normalize(raw)
+    node.children ??= []
+    return node
+}
+
 // --- Caching -----------------------------------------------------------------
 // Nodes are kept in memory for the session and in localStorage across visits,
 // which makes replaying starting points and revisiting variations instant.
@@ -97,10 +104,10 @@ export function getNode(id) {
     if (!memory.has(id)) {
         const stored = readStorage(id)
         const promise = stored
-            ? Promise.resolve(normalize(stored))
+            ? Promise.resolve(normalizeFull(stored))
             : download(id).then((raw) => {
                 writeStorage(id, raw)
-                return normalize(raw)
+                return normalizeFull(raw)
             })
         promise.catch(() => memory.delete(id))
         memory.set(id, promise)

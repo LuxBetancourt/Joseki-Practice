@@ -1,5 +1,6 @@
 import { Position, IllegalMoveError, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
-import { getNode, prefetch, ROOT_ID, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
+import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
+import { generateNextMove, generatePunish } from './problems.js'
 import { parseComment, splitPath } from './text.js'
 import { BoardView } from './board-view.js'
 import { JOSEKI, FUSEKI, CLASSIC_OPENINGS } from './starting-points.js'
@@ -10,6 +11,7 @@ const $ = (selector) => document.querySelector(selector)
 // --- Settings ------------------------------------------------------------------
 
 const DEFAULT_SETTINGS = {
+    mode: 'practice', // 'practice' | 'next' | 'punish'
     player: 'black',
     ideal: true, good: false, bad: false, trick: false, question: false,
     firstTen: true,
@@ -58,6 +60,13 @@ let freePlay = false
 let busy = false
 // Bumped whenever the game is navigated; async work started earlier checks it and bails out.
 let generation = 0
+
+// The active problem in "next" / "punish" mode: the player must answer at history[index].
+//   answers: Map of coord -> move type for every move Josekipedia knows there
+//   mistake: { move, type } for punish problems
+let problem = null
+const stats = { next: { solved: 0, attempted: 0 }, punish: { solved: 0, attempted: 0 } } // This session's score per mode
+const problemPending = () => problem && !problem.solved && !problem.revealed
 
 const currentEntry = () => history[current]
 const isHumanTurn = (entry = currentEntry()) => freePlay || entry.position.toPlay === humanColor()
@@ -113,10 +122,103 @@ function playMove(coord, { byHuman }) {
         throw e
     }
 
+    const answering = byHuman && problemPending() && current === problem.index
     pushEntry({ position, move: { coord, color }, node: undefined, path: entry.path + coord })
     ++generation
+    if (answering) {
+        gradeAnswer(coord)
+        return
+    }
     if (coord === PASS) { toast(`${byHuman && !freePlay ? 'You' : capitalize(colorName(color))} passed.`) }
     advance({ feedback: byHuman })
+}
+
+// --- Problems ------------------------------------------------------------------
+
+function gradeAnswer(coord) {
+    const type = problem.answers.get(coord)
+    const score = stats[problem.kind]
+    if (++problem.attempts === 1) { ++score.attempted }
+
+    const correct = type === MoveType.IDEAL || (type === MoveType.GOOD && problem.kind === 'next')
+    if (correct) {
+        problem.solved = true
+        if (problem.attempts === 1) { ++score.solved }
+        toast(type === MoveType.IDEAL ? '✓✓ Correct!' : '✓ Correct (a good move).', 'success')
+        advance() // The computer replies and play continues as practice
+        return
+    }
+
+    let message = 'That move isn’t in Josekipedia here.'
+    if (type === MoveType.GOOD) { message = 'Playable, but there’s a stronger punishment.' }
+    else if (MOVE_TYPE_NAMES[type]) { message = `That’s a ${MOVE_TYPE_NAMES[type] === 'question' ? 'questionable' : MOVE_TYPE_NAMES[type]} move.` }
+    toast(`${message} Try again.`, 'error')
+
+    // Show the wrong move briefly, then take it back
+    const gen = generation
+    setBusy(true)
+    setTimeout(() => {
+        if (gen !== generation) { return }
+        history = history.slice(0, problem.index + 1)
+        current = problem.index
+        ++generation
+        setBusy(false)
+    }, 1200)
+}
+
+function revealAnswer() {
+    if (!problemPending()) { return }
+    problem.revealed = true
+    if (problem.attempts === 0) { ++stats[problem.kind].attempted }
+    goTo(problem.index)
+    render()
+}
+
+const problemPrompt = () => {
+    const you = capitalize(colorName(humanColor()))
+    if (problem.kind === 'next') { return `${you} to play. Find the joseki move.` }
+    const { move, type } = problem.mistake
+    const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
+    const where = sgfToDisplay(move)
+    return type === MoveType.TRICK
+        ? `${them}’s ${where} is a trick move. Find the refutation.`
+        : `${them}’s ${where} is a mistake. Punish it!`
+}
+
+async function newProblem() {
+    const gen = ++generation
+    problem = null
+    freePlay = false
+    if (!history.length) { setupPosition([]) }
+    clearToasts()
+    setBusy(true)
+
+    const start = settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start
+    const options = { startMoves: splitPath(start), color: humanColor(), firstTen: settings.firstTen, getNode }
+    try {
+        const kind = settings.mode
+        // Random lines often end early in tenuki, so try a few before giving up
+        let found = null
+        for (let attempt = 0; attempt < 3 && !found && gen === generation; ++attempt) {
+            found = await (kind === 'next' ? generateNextMove(options) : generatePunish(options))
+        }
+        if (gen !== generation) { return }
+        if (!found) {
+            setBusy(false)
+            toast('Couldn’t find a problem from this starting point.', 'warning', { label: 'Try Again', action: newProblem })
+            return
+        }
+        setupPosition(found.moves)
+        problem = { kind, index: current, answers: found.answers, mistake: found.mistake, attempts: 0, solved: false, revealed: false }
+        ++generation
+        advance()
+    }
+    catch (error) {
+        if (gen !== generation) { return }
+        console.error(error)
+        setBusy(false)
+        toast('Couldn’t load data from Josekipedia.', 'error', { label: 'Retry', action: newProblem })
+    }
 }
 
 /** Loads info for the current position, gives feedback and lets the computer reply if it's its turn. */
@@ -243,13 +345,20 @@ function pass() {
 }
 
 function startGame(start) {
+    problem = null
     freePlay = start === 'demo'
-    const moves = start === 'empty' || start === 'demo' ? [] : splitPath(start)
     const preset = [...JOSEKI, ...FUSEKI].flatMap(function flatten(p) { return [p, ...(p.children || []).flatMap(flatten)] })
         .find((p) => p.path === start)
     if (!freePlay) { prefetch([ROOT_ID, ...(preset?.ids || [])]) }
 
     clearToasts()
+    setupPosition(start === 'empty' || start === 'demo' ? [] : splitPath(start))
+    ++generation
+    advance()
+}
+
+/** Replaces the game with the position after `moves`. Nodes are looked up later by advance(). */
+function setupPosition(moves) {
     history = [{ position: new Position(), move: null, node: freePlay ? null : { id: ROOT_ID, labels: [] }, path: '' }]
     current = 0
     for (const coord of moves) {
@@ -263,8 +372,6 @@ function startGame(start) {
             break
         }
     }
-    ++generation
-    advance()
 }
 
 // --- Rendering -----------------------------------------------------------------
@@ -276,31 +383,55 @@ function render() {
     const { position } = entry
     const lastMove = entry.move && fromSgf(entry.move.coord)
 
+    const toHighlight = (move, type) => ({ ...fromSgf(move), type: MOVE_TYPE_NAMES[type] || 'unknown' })
     let highlights = []
-    if (settings.showMoves && entry.node?.children) {
+    if (problem?.revealed && current === problem.index) {
+        const accepted = problem.kind === 'next' ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
+        highlights = [...problem.answers].filter(([, type]) => accepted.includes(type)).map(([move, type]) => toHighlight(move, type))
+    }
+    else if (settings.showMoves && entry.node?.children && !problemPending()) {
         highlights = entry.node.children
             .filter((child) => child.color === position.toPlay)
-            .map((child) => ({ ...fromSgf(child.move), type: MOVE_TYPE_NAMES[child.type] || 'unknown' }))
-            .filter((h) => h.x !== undefined)
+            .map((child) => toHighlight(child.move, child.type))
     }
-    view.render({ position, lastMove, highlights })
+    view.render({ position, lastMove, highlights: highlights.filter((h) => h.x !== undefined) })
 
     $('#undo').disabled = current === 0
     $('#redo').disabled = current === history.length - 1
     $('#pass').disabled = busy || !isHumanTurn()
 
     const toPlay = capitalize(colorName(position.toPlay))
-    $('#status').textContent = busy
-        ? (isHumanTurn() ? 'Loading…' : 'Thinking…')
+    const showingWrongAnswer = problemPending() && current > problem.index
+    $('#status').textContent = showingWrongAnswer ? '' : busy
+        ? (problem || settings.mode === 'practice' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
         : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
 
+    renderProblemBar()
     renderMoveInfo(entry)
+}
+
+function renderProblemBar() {
+    const inProblemMode = settings.mode !== 'practice'
+    $('#problem-bar').hidden = !inProblemMode
+    if (!inProblemMode) { return }
+
+    let prompt = ''
+    if (problemPending()) { prompt = problemPrompt() }
+    else if (problem?.solved) { prompt = 'Solved! Keep playing, or get a new problem.' }
+    else if (problem?.revealed) { prompt = 'Answers are highlighted.' }
+    else if (!problem && !busy) { prompt = 'No problem loaded. Try again, or choose another starting point.' }
+    $('#problem-prompt').textContent = prompt
+    $('#show-answer').disabled = !problemPending() || busy
+    const score = stats[settings.mode]
+    $('#score').textContent = score.attempted ? `${score.solved} / ${score.attempted} solved first try` : ''
 }
 
 function renderMoveInfo(entry) {
     $('#move-info').hidden = !settings.showMoveInfo
     if (!settings.showMoveInfo) { return }
 
+    const spoiler = problemPending() && current >= problem.index
+    $('#josekipedia-link').hidden = spoiler
     $('#josekipedia-link').href = `${JOSEKIPEDIA_URL}#path:${entry.path}`
     $('#move-title').textContent = entry.move
         ? `Move ${current}: ${capitalize(colorName(entry.move.color))} ${sgfToDisplay(entry.move.coord)}`
@@ -314,6 +445,10 @@ function renderMoveInfo(entry) {
     const node = entry.node
     if (freePlay) {
         comment.textContent = 'Demo board: joseki info is off.'
+        return
+    }
+    if (spoiler) {
+        comment.textContent = 'Comments are hidden until you answer.'
         return
     }
     if (node === undefined || (node && !node.children && busy)) {
@@ -450,7 +585,7 @@ function bindControls() {
         const start = new FormData(e.target).get('start') || 'empty'
         settings.start = start
         saveSettings()
-        startGame(start)
+        begin()
     })
     const savedStart = document.querySelector(`input[name="start"][value="${CSS.escape(settings.start)}"]`)
     if (savedStart) { savedStart.checked = true }
@@ -460,10 +595,24 @@ function bindControls() {
         input.addEventListener('change', () => {
             settings.player = input.value
             saveSettings()
+            if (settings.mode !== 'practice') { return newProblem() }
             ++generation
             advance() // The computer moves if it's now its turn
         })
     }
+
+    for (const input of document.querySelectorAll('input[name="mode"]')) {
+        input.checked = input.value === settings.mode
+        input.addEventListener('change', () => {
+            settings.mode = input.value
+            saveSettings()
+            applyMode()
+            begin()
+        })
+    }
+    applyMode()
+    $('#show-answer').addEventListener('click', revealAnswer)
+    $('#next-problem').addEventListener('click', newProblem)
 
     for (const input of document.querySelectorAll('[data-setting]')) {
         const key = input.dataset.setting
@@ -481,6 +630,7 @@ function bindControls() {
             ArrowLeft: undo,
             ArrowRight: redo,
             h: () => $('[data-setting="showMoves"]').click(),
+            n: () => { if (settings.mode !== 'practice') { newProblem() } },
         }
         const action = actions[e.key]
         if (action) {
@@ -490,6 +640,22 @@ function bindControls() {
     })
 }
 
+/** Shows the controls for the current mode. */
+function applyMode() {
+    document.body.dataset.mode = settings.mode
+    $('#start').textContent = settings.mode === 'practice' ? 'Start' : 'New Problem'
+}
+
+/** Starts a practice game or a problem, depending on the mode. */
+function begin() {
+    if (settings.mode === 'practice') {
+        startGame(settings.start)
+    }
+    else {
+        newProblem()
+    }
+}
+
 buildStartingPoints()
 bindControls()
-startGame(settings.start)
+begin()

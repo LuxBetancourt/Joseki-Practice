@@ -26,6 +26,12 @@
             <span id="status" role="status"></span>
             <button type="button" id="pass" title="Pass / tenuki">Pass</button>
         </div>
+        <div id="problem-bar" hidden>
+            <span id="problem-prompt"></span>
+            <span id="score"></span>
+            <button type="button" id="show-answer">Show Answer</button>
+            <button type="button" id="next-problem" class="primary" title="New problem (N)">Next</button>
+        </div>
         <div id="board-wrap">
             <svg id="board" role="img" aria-label="Go board"></svg>
             <div id="toasts" aria-live="polite"></div>
@@ -34,6 +40,13 @@
     </section>
 
     <aside id="setup" class="panel">
+        <h2>Mode</h2>
+        <div class="segmented" role="radiogroup" aria-label="Mode">
+            <input type="radio" name="mode" id="mode-practice" value="practice"><label for="mode-practice" title="Play against the computer from a starting point">Practice</label>
+            <input type="radio" name="mode" id="mode-next" value="next"><label for="mode-next" title="Find the joseki move from a position partway through a joseki">Next Move</label>
+            <input type="radio" name="mode" id="mode-punish" value="punish"><label for="mode-punish" title="The computer makes a mistake; find the move that punishes it">Punish</label>
+        </div>
+
         <h2>Player</h2>
         <div class="segmented" role="radiogroup" aria-label="Play as">
             <input type="radio" name="player" id="player-black" value="black"><label for="player-black">Black</label>
@@ -44,7 +57,7 @@
         <form id="start-form">
             <ul class="tree" id="starting-points">
                 <li><label><input type="radio" name="start" value="empty" checked> Empty Board</label></li>
-                <li title="Play both colors freely. The computer won't respond and no joseki info is loaded.">
+                <li class="practice-only" title="Play both colors freely. The computer won't respond and no joseki info is loaded.">
                     <label><input type="radio" name="start" value="demo"> Demo Board</label>
                 </li>
             </ul>
@@ -55,18 +68,21 @@
     </aside>
 
     <aside id="options" class="panel">
-        <h2>Computer Plays</h2>
-        <ul class="plain">
+        <h2 class="practice-only">Computer Plays</h2>
+        <ul class="plain practice-only">
             <li><label><input type="checkbox" data-setting="ideal"> <span class="swatch ideal"></span>Ideal moves</label></li>
             <li><label><input type="checkbox" data-setting="good"> <span class="swatch good"></span>Good moves</label></li>
             <li><label><input type="checkbox" data-setting="bad"> <span class="swatch bad"></span>Bad moves</label></li>
             <li><label><input type="checkbox" data-setting="trick"> <span class="swatch trick"></span>Trick moves</label></li>
             <li><label><input type="checkbox" data-setting="question"> <span class="swatch question"></span>Questionable moves</label></li>
-            <li title="Only consider the first ten continuations Josekipedia lists. Helps avoid unusual moves, like fuseki plays.">
-                <label><input type="checkbox" data-setting="firstTen"> First ten variations only</label>
-            </li>
             <li title="Josekipedia often shows what happens if a player tenukis (plays elsewhere). With this checked, the computer only passes when tenuki is joseki.">
                 <label><input type="checkbox" data-setting="onlyPassIfJoseki"> Only pass if joseki</label>
+            </li>
+        </ul>
+        <h2>Variations</h2>
+        <ul class="plain">
+            <li title="Only consider the first ten continuations Josekipedia lists. Helps avoid unusual moves, like fuseki plays.">
+                <label><input type="checkbox" data-setting="firstTen"> First ten variations only</label>
             </li>
         </ul>
         <h2>Display</h2>
