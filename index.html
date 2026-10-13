@@ -23,7 +23,7 @@
         <div id="board-controls">
             <button type="button" id="undo" title="Undo (←)">Undo</button>
             <button type="button" id="redo" title="Redo (→)">Redo</button>
-            <span id="status" role="status"></span>
+            <span id="status" role="status"><span class="spinner" aria-hidden="true" hidden></span><span id="status-text"></span></span>
             <span id="score"></span>
             <button type="button" id="copy-link" class="explore-only" title="Copy a link to this position">Copy link</button>
             <button type="button" id="pass" title="Pass / tenuki">Pass</button>
@@ -37,6 +37,7 @@
         </div>
         <div id="board-wrap">
             <svg id="board" role="img" aria-label="Go board"></svg>
+            <div id="board-loading" hidden><span class="spinner large" aria-hidden="true"></span></div>
         </div>
         <div id="path-choices" hidden></div>
         <p class="hint" id="board-hint">Right-click a stone to return to that move.</p>

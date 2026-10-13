@@ -554,3 +554,40 @@ body[data-mode="explore"] .not-explore { display: none; }
     shape-rendering: crispEdges;
 }
 body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First heading in Review mode */
+
+/* --- Loading spinners -------------------------------------------------------- */
+
+.spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: -.15em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    opacity: 0;
+    /* Fade in after a moment, so quick loads don't flicker */
+    animation: spin .8s linear infinite, spinner-in .2s ease-out .25s forwards;
+}
+.spinner[hidden] { display: none; }
+.spinner.large { width: 3rem; height: 3rem; border-width: 4px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spinner-in { to { opacity: .8; } }
+@media (prefers-reduced-motion: reduce) {
+    .spinner { animation: spinner-in .2s ease-out .25s forwards, spinner-pulse 1.2s ease-in-out .45s infinite alternate; border-right-color: currentColor; }
+    @keyframes spinner-pulse { from { opacity: .8; } to { opacity: .3; } }
+}
+#status .spinner { margin-right: .4em; }
+
+#board-loading {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--wood-line);
+    pointer-events: none;
+}
+#board-loading[hidden] { display: none; }
+.shape-slot .spinner { color: var(--muted); }
+/* Dim whatever was on the board while a problem is being found, so it doesn't look current */
+#board-wrap:has(#board-loading:not([hidden])) #board { opacity: .35; transition: opacity .2s .25s; }

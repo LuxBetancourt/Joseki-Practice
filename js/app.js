@@ -704,7 +704,10 @@ function render() {
 
     const toPlay = capitalize(colorName(position.toPlay))
     const showingWrongAnswer = problemPending() && current > answerIndex()
-    $('#status').textContent = showingWrongAnswer ? '' : busy
+    const findingProblem = busy && !problem && settings.mode !== 'explore'
+    $('#status .spinner').hidden = !busy || showingWrongAnswer
+    $('#board-loading').hidden = !findingProblem // Finding a problem can take a few seconds
+    $('#status-text').textContent = showingWrongAnswer ? '' : busy
         ? (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
         : problemPending() && problem.kind === 'path' ? 'Choose a sequence below'
         : ['shape', 'path'].includes(problem?.kind) && problem.solved && !isHumanTurn() ? '' // The joseki is complete
@@ -872,7 +875,7 @@ function followUpCard(child, position, key) {
     card.className = 'follow-up-card'
     const slot = document.createElement('div')
     slot.className = 'shape-slot'
-    slot.textContent = 'Loading…'
+    slot.append(spinner())
     const caption = document.createElement('figcaption')
     const name = document.createElement('strong')
     name.textContent = sgfToDisplay(child.move)
@@ -993,7 +996,7 @@ function renderMoveInfo(entry) {
         return
     }
     if (node === undefined || (node && !node.children && busy)) {
-        comment.textContent = 'Loading…'
+        comment.replaceChildren(spinner(), ' Loading…')
         return
     }
     if (node === null) {
@@ -1077,6 +1080,14 @@ function renderSegment(segment) {
 }
 
 // --- Toasts --------------------------------------------------------------------
+
+/** A small loading spinner (see .spinner in index.css). */
+function spinner() {
+    const element = document.createElement('span')
+    element.className = 'spinner'
+    element.setAttribute('aria-hidden', 'true')
+    return element
+}
 
 /**
  * Shows a message over the board. It fades after a few seconds, unless it has an action button
