@@ -142,6 +142,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const view = new BoardView($('#board'), {
     onPlay: (x, y) => {
         if (canPlayOnBoard()) { playMove(toSgf(x, y), { byHuman: true }) }
+        else if (answeredWithButtons()) { nudgeAnswerButtons() }
     },
     onContextMenu: returnToMove,
     canHover: () => (canPlayOnBoard() ? currentEntry().position.toPlay : null),
@@ -736,6 +737,7 @@ function render() {
     const pathProblem = problem?.kind === 'path' && current >= problem.index
     $('#board-wrap').hidden = pathProblem
     $('#board-hint').hidden = pathProblem
+    $('#board-wrap').classList.toggle('view-only', answeredWithButtons()) // Look, don't play: see .view-only
     $('#undo').disabled = current === 0 || navigationLocked()
     $('#redo').disabled = current === history.length - 1 || navigationLocked()
     $('#pass').disabled = !canPlayOnBoard()
@@ -765,6 +767,18 @@ function render() {
 // --- Answer buttons (Who's Better?, Tenuki-able?) ------------------------------------
 
 let answerChoicesFor = null // The problem the buttons were built for
+
+/** True while a problem is waiting for an answer from the buttons rather than a move on the board. */
+const answeredWithButtons = () => Boolean(problemPending() && ANSWER_CHOICES[problem.kind] && current >= problem.index)
+
+/** A click on the board in a button-answered problem: bring the buttons into view and pulse them. */
+function nudgeAnswerButtons() {
+    const buttons = $('#answer-buttons')
+    $('#answer-choices').scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    buttons.classList.remove('nudge')
+    void buttons.offsetWidth // Restart the animation
+    buttons.classList.add('nudge')
+}
 
 function renderAnswerChoices() {
     const container = $('#answer-choices')
