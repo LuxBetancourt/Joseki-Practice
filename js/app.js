@@ -1,13 +1,13 @@
 import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import {
-    generateNextMove, generatePunish, generateFinalShape, generatePickPath,
+    generateNextMove, generatePunish, generateFinalShape, generatePickPath, generateWhosBetter, generateTenuki,
     problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem,
 } from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
-import { parseComment, splitPath } from './text.js'
+import { parseComment, splitPath, cleanText } from './text.js'
 import { BoardView, markShape } from './board-view.js'
 import { JOSEKI, FUSEKI, CLASSIC_OPENINGS } from './starting-points.js'
 import { JOSEKIPEDIA_URL } from './config.js'
@@ -18,7 +18,7 @@ const $ = (selector) => document.querySelector(selector)
 
 const DEFAULT_SETTINGS = {
     mode: 'explore', // 'explore' | 'problems'
-    problemTypes: { next: true, punish: true, shape: true, path: true },
+    problemTypes: { next: true, punish: true, shape: true, path: true, better: true, tenuki: true },
     player: 'black',
     ideal: true, good: false, bad: false, trick: false, question: false,
     firstTen: true,
@@ -95,9 +95,21 @@ const stats = { // This session's score per mode
     punish: { solved: 0, attempted: 0 },
     shape: { solved: 0, attempted: 0 },
     path: { solved: 0, attempted: 0 },
+    better: { solved: 0, attempted: 0 },
+    tenuki: { solved: 0, attempted: 0 },
 }
-const GENERATORS = { next: generateNextMove, punish: generatePunish, shape: generateFinalShape, path: generatePickPath }
-const PROBLEM_TYPE_NAMES = { next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path' }
+const GENERATORS = {
+    next: generateNextMove, punish: generatePunish, shape: generateFinalShape, path: generatePickPath,
+    better: generateWhosBetter, tenuki: generateTenuki,
+}
+const PROBLEM_TYPE_NAMES = {
+    next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path', better: 'Who’s Better?', tenuki: 'Tenuki-able?',
+}
+// Problems answered with buttons rather than on the board, and the answers they offer
+const ANSWER_CHOICES = {
+    better: [['black', 'Black is better'], ['even', 'Even'], ['white', 'White is better']],
+    tenuki: [['yes', 'Yes'], ['no', 'No']],
+}
 const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => settings.problemTypes[kind])
 
 // Problems the player missed come back for review (see reviews.js). In Problems mode, Next mixes
@@ -118,12 +130,12 @@ const problemPending = () => problem && !problem.solved && !problem.revealed
 // Where the player answers: shape problems move along their line as the player plays it out
 const answerIndex = () => problem.index + (problem.kind === 'shape' ? problem.step : 0)
 // Final Shape and Pick the Path follow a fixed sequence, so moving around the game would break them
-const navigationLocked = () => problemPending() && ['shape', 'path'].includes(problem.kind)
+const navigationLocked = () => problemPending() && ['shape', 'path', 'better', 'tenuki'].includes(problem.kind)
 
 const currentEntry = () => history[current]
 const isHumanTurn = (entry = currentEntry()) => freePlay || entry.position.toPlay === humanColor()
 // Path problems are answered by picking a sequence, not by playing on the board
-const canPlayOnBoard = () => !busy && isHumanTurn() && !(problemPending() && problem.kind === 'path')
+const canPlayOnBoard = () => !busy && isHumanTurn() && !(problemPending() && ['path', 'better', 'tenuki'].includes(problem.kind))
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -355,6 +367,11 @@ const problemPrompt = () => {
         return `Keep going: ${left} more move${left === 1 ? '' : 's'} to reach the shape.`
     }
     if (problem.kind === 'path') { return 'Which sequence is joseki, with both sides playing joseki moves from here?' }
+    if (problem.kind === 'better') { return 'Who’s better in this position?' }
+    if (problem.kind === 'tenuki') {
+        const side = capitalize(colorName(problem.spec.color))
+        return `It’s ${side}’s turn. Can ${side} tenuki (play elsewhere) here?`
+    }
     const { move, type } = problem.mistake
     const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
     const where = sgfToDisplay(move)
@@ -430,7 +447,7 @@ async function newProblem() {
             toast(`Couldn’t find a ${which} problem from this starting point.${suggestion}`, 'warning', { label: 'Try Again', action: () => newProblem() })
             return
         }
-        presentProblem(found, kind, { reviewKey, color: reviewColor || humanColor() })
+        presentProblem(found, kind, { reviewKey, color: reviewColor || found.color || humanColor() })
     }
     catch (error) {
         if (gen !== generation) { return }
@@ -469,7 +486,7 @@ async function advance({ feedback = false } = {}) {
         if (feedback) { giveFeedback(entry) }
         if (!entry.node) { return }
 
-        if (!isHumanTurn(entry)) {
+        if (!isHumanTurn(entry) && !navigationLocked()) { // Not while a problem is waiting for an answer
             const move = chooseComputerMove(entry)
             if (!move) { return }
             setBusy(true)
@@ -684,8 +701,8 @@ function render() {
         highlights = [toHighlight(problem.line[problem.step].move, MoveType.IDEAL)]
     }
     else if (problem?.revealed && current === problem.index) {
-        if (problem.kind === 'path') {
-            highlights = [] // The correct sequence is marked among the choices instead
+        if (['path', 'better', 'tenuki'].includes(problem.kind)) {
+            highlights = [] // The answer is marked among the choices instead
         }
         else {
             const hasIdeal = [...problem.answers.values()].includes(MoveType.IDEAL)
@@ -701,7 +718,15 @@ function render() {
     // The faded target stays up while the player plays it out (and while a wrong move is shown)
     const showTarget = problem?.kind === 'shape' && problemPending() && current >= problem.index
     const target = showTarget ? problem.target : null
-    view.render({ position, lastMove, highlights: highlights.filter((h) => h.x !== undefined), marks: currentMarks(), target })
+    // Punish marks the mistake with an X rather than the usual last-move ring
+    const mistakeShown = problem?.kind === 'punish' && current === problem.index
+    view.render({
+        position,
+        lastMove: lastMove && { ...lastMove, style: mistakeShown ? 'cross' : 'ring' },
+        highlights: highlights.filter((h) => h.x !== undefined),
+        marks: currentMarks(),
+        target,
+    })
 
     // Pick the Path shows only the sequences, not the board
     const pathProblem = problem?.kind === 'path' && current >= problem.index
@@ -719,6 +744,7 @@ function render() {
     $('#status-text').textContent = showingWrongAnswer ? '' : busy
         ? (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
         : problemPending() && problem.kind === 'path' ? 'Choose a sequence below'
+        : problemPending() && ANSWER_CHOICES[problem.kind] ? 'Choose an answer below'
         : ['shape', 'path'].includes(problem?.kind) && problem.solved && !isHumanTurn() ? '' // The joseki is complete
             : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
 
@@ -726,9 +752,88 @@ function render() {
     renderReviewStatus()
     updateUrl(entry)
     renderPathChoices()
+    renderAnswerChoices()
     renderPathStartMarks()
     renderMoveInfo(entry)
     renderFollowUps(entry)
+}
+
+// --- Answer buttons (Who's Better?, Tenuki-able?) ------------------------------------
+
+let answerChoicesFor = null // The problem the buttons were built for
+
+function renderAnswerChoices() {
+    const container = $('#answer-choices')
+    const choices = problem && ANSWER_CHOICES[problem.kind]
+    container.hidden = !choices || current < problem.index
+    if (container.hidden) { return }
+
+    if (answerChoicesFor !== problem) {
+        answerChoicesFor = problem
+        $('#answer-buttons').replaceChildren(...choices.map(([value, label]) => {
+            const button = document.createElement('button')
+            button.type = 'button'
+            button.dataset.value = value
+            button.textContent = label
+            button.addEventListener('click', () => gradeAnswerChoice(value))
+            return button
+        }))
+    }
+    const answered = !problemPending()
+    for (const button of $('#answer-buttons').children) {
+        button.disabled = answered || busy
+        button.classList.toggle('correct', answered && button.dataset.value === problem.answer)
+        button.classList.toggle('wrong', answered && button.dataset.value === problem.picked && problem.picked !== problem.answer)
+    }
+    $('#answer-explanation').replaceChildren(...(answered ? answerExplanation() : []))
+}
+
+/** What Josekipedia records that gives the answer, as text (and the tenuki comment, if any). */
+function answerExplanation() {
+    const node = history[problem.index].node
+    if (problem.kind === 'better') {
+        const verdicts = problem.labels.map(labelText).filter(Boolean)
+        return [`Josekipedia: ${verdicts.join(' ')}`]
+    }
+    const color = problem.spec.color
+    const side = capitalize(colorName(color))
+    const pass = node?.children?.find((child) => child.move === PASS && child.color === color)
+    const reasons = []
+    if (node?.labels.includes(TENUKI_LABEL[color])) { reasons.push(`Josekipedia notes that ${side} can tenuki here.`) }
+    if (pass && MOVE_TYPE_NAMES[pass.type]) { reasons.push(`Tenuki is recorded as ${pass.type === MoveType.IDEAL ? 'an' : 'a'} ${MOVE_TYPE_NAMES[pass.type]} move here.`) }
+    if (node?.children?.some((child) => child.color === color && child.labels.includes(15))) { reasons.push(`${side}’s next move here is marked “Necessary”.`) }
+    const parts = [reasons.join(' ')]
+    const comment = pass && cleanText(pass.comment)
+    if (comment) {
+        const quote = document.createElement('span')
+        quote.className = 'tenuki-comment'
+        quote.textContent = `If ${side} tenukis: ${comment}`
+        parts.push(quote)
+    }
+    return parts
+}
+
+function gradeAnswerChoice(value) {
+    if (!problemPending() || busy) { return }
+    const score = stats[problem.kind]
+    ++problem.attempts
+    ++score.attempted
+    problem.picked = value
+    const correct = value === problem.answer
+    recordFirstAttempt(correct)
+    if (correct) {
+        problem.solved = true
+        ++score.solved
+        toast('✓✓ Correct!', 'success')
+        render()
+        autoAdvanceAfterSolving()
+        return
+    }
+    // Only two or three answers, so a wrong one reveals the right one rather than allowing guesses
+    problem.revealed = true
+    const right = ANSWER_CHOICES[problem.kind].find(([v]) => v === problem.answer)[1]
+    toast(`Not quite: ${right}.`, 'error')
+    render()
 }
 
 // --- Pick the Path choices ------------------------------------------------------
@@ -938,9 +1043,10 @@ function renderProblemBar() {
     else if (problem?.solved) {
         prompt = settings.autoAdvance
             ? 'Solved! Next problem coming up…'
-            : { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.' }[problem.kind] || 'Solved! Keep playing, or get a new problem.'
+            : { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.', better: 'Correct!', tenuki: 'Correct!' }[problem.kind]
+                || 'Solved! Keep playing, or get a new problem.'
     }
-    else if (problem?.revealed) { prompt = 'Answers are highlighted.' }
+    else if (problem?.revealed) { prompt = ANSWER_CHOICES[problem.kind] ? 'The answer is marked below.' : 'Answers are highlighted.' }
     else if (!problem && !busy) {
         prompt = settings.mode === 'review' ? reviewEmptyPrompt() : 'No problem loaded. Try again, or choose another starting point.'
     }

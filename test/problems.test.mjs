@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -242,4 +242,53 @@ test('problem links reject anything else', () => {
     for (const bad of ['', 'not-base64!', btoa('{"k":"nope","m":"pd","c":1,"d":{}}'), btoa('{"k":"next","m":"zz","c":1,"d":{}}'), btoa('{"k":"next","m":"pd","c":3,"d":{}}')]) {
         assert.throws(() => decodeProblem(bad), undefined, bad)
     }
+})
+
+test("who's better: verdict labels map to an answer", () => {
+    assert.equal(outcomeOf([2]), 'black')
+    assert.equal(outcomeOf([46, 13]), 'black')
+    assert.equal(outcomeOf([47]), 'white')
+    assert.equal(outcomeOf([21]), 'white', 'Black collapses')
+    assert.equal(outcomeOf([45]), 'even')
+    assert.equal(outcomeOf([2, 1]), null, 'contradictory')
+    assert.equal(outcomeOf([9, 23]), null, 'no verdict')
+})
+
+test("who's better: finds a position with the chosen answer, or none", async () => {
+    const tree = pathTree({
+        44: [{ id: 45, move: 'qd', color: B, type: 0, labels: [45] }, { id: 92, move: 'rd', color: B, type: 2, labels: [1] }],
+        92: [],
+    })
+    const getNode = async (id) => ({ id, labels: [], children: (tree[id] || []).map((c) => ({ labels: [], ...c })) })
+    // OUTCOMES is [black, white, even]: 0.4 picks white, 0.9 even, 0.1 black
+    const white = await generateWhosBetter({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.4]) })
+    assert.deepEqual(white, { moves: [...START, 'rd'], answer: 'white', labels: [1] })
+    const even = await generateWhosBetter({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.9, 0.1]) })
+    assert.deepEqual(even.moves, [...START, 'qd'])
+    assert.equal(even.answer, 'even')
+    assert.equal(await generateWhosBetter({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.1]) }), null, 'no black verdicts here')
+})
+
+test('tenuki-able: the evidence rules', () => {
+    const node = (children, labels = []) => ({ labels, children })
+    const pass = (color, type) => ({ move: 'tt', color, type, labels: [] })
+    assert.equal(tenukiVerdict(node([], [10]), BLACK), 'yes', 'Black can tenuki label')
+    assert.equal(tenukiVerdict(node([], [10]), WHITE), null, "that label isn't about White")
+    assert.equal(tenukiVerdict(node([pass(BLACK, 0)]), BLACK), 'yes', 'tenuki is joseki')
+    assert.equal(tenukiVerdict(node([pass(BLACK, 2)]), BLACK), 'no', 'tenuki is a bad move')
+    assert.equal(tenukiVerdict(node([pass(BLACK, 2)], [10]), BLACK), null, 'contradictory')
+    assert.equal(tenukiVerdict(node([]), BLACK), null, 'a missing label proves nothing')
+    assert.equal(tenukiVerdict(node([{ move: 'qd', color: BLACK, type: 0, labels: [15] }]), BLACK), 'no', 'a Necessary move')
+})
+
+test('tenuki-able: finds a position with the chosen answer', async () => {
+    const tree = pathTree({
+        44: [{ id: 45, move: 'qd', color: B, type: 0 }, { id: 96, move: 'tt', color: B, type: 2 }], // tenuki is bad here
+        46: [{ id: 47, move: 'od', color: B, type: 0 }],
+    })
+    const getNode = async (id) => ({ id, labels: id === 46 ? [10] : [], children: (tree[id] || []).map((c) => ({ labels: [], ...c })) })
+    const no = await generateTenuki({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.7]) })
+    assert.deepEqual(no, { moves: START, answer: 'no', color: BLACK })
+    const yes = await generateTenuki({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.1]) })
+    assert.deepEqual(yes, { moves: [...START, 'qd', 'pc'], answer: 'yes', color: BLACK })
 })

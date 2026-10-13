@@ -139,7 +139,7 @@ export class BoardView {
     /**
      * @param {object} state
      *   position:   Position to draw
-     *   lastMove:   {x, y} | null
+     *   lastMove:   {x, y, style?} | null; style 'cross' marks it with an X instead of a ring
      *   highlights: [{x, y, type}] candidate moves; type is a CSS class suffix
      *   marks:      [{x, y, shape}] marked points; shape is 'triangle', 'square' or 'circle'
      *   target:     Position | null; stones it adds are drawn faded, stones it lacks are crossed out
@@ -174,8 +174,11 @@ export class BoardView {
         }
         const marked = (x, y) => marks.some((m) => m.x === x && m.y === y)
         if (lastMove && position.at(lastMove.x, lastMove.y) !== EMPTY && !marked(lastMove.x, lastMove.y)) {
-            const on = position.at(lastMove.x, lastMove.y) === BLACK ? 'on-black' : 'on-white'
-            stones.push(`<circle class="last-move ${on}" cx="${lastMove.x}" cy="${lastMove.y}" r="0.2"/>`)
+            const { x, y } = lastMove
+            const on = position.at(x, y) === BLACK ? 'on-black' : 'on-white'
+            stones.push(lastMove.style === 'cross'
+                ? `<path class="last-move-cross" d="M${x - 0.24} ${y - 0.24}L${x + 0.24} ${y + 0.24}M${x + 0.24} ${y - 0.24}L${x - 0.24} ${y + 0.24}"/>`
+                : `<circle class="last-move ${on}" cx="${x}" cy="${y}" r="0.2"/>`)
         }
         this.stoneLayer.innerHTML = stones.join('')
 

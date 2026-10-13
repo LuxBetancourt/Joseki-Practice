@@ -2,7 +2,7 @@
 // Each step costs one node lookup, so walks stop at a random target depth.
 
 import { Position, PASS, SIZE, EMPTY, BLACK, WHITE, fromSgf, toSgf, opponent } from './go.js'
-import { ROOT_ID, MoveType } from './josekipedia.js'
+import { ROOT_ID, MoveType, TENUKI_LABEL } from './josekipedia.js'
 import { CLASSIC_OPENINGS } from './starting-points.js'
 import { mainLine } from './lines.js'
 
@@ -259,6 +259,8 @@ export function problemData(kind, problem) {
         case 'punish': return { mistake: problem.mistake }
         case 'shape': return { answer: problem.answer, line: problem.line }
         case 'path': return { line: problem.line, options: problem.options.map(({ line, mistake }) => ({ line, mistake })) }
+        case 'better': return { answer: problem.answer, labels: problem.labels }
+        case 'tenuki': return { answer: problem.answer }
         default: return {}
     }
 }
@@ -283,12 +285,88 @@ export async function rebuildProblem({ kind, moves, color, data }, { getNode, ra
             if (options.some((option) => !option.position)) { throw new StaleProblemError('Saved path problem no longer fits the position') }
             return { moves, line: data.line, options: shuffle(options, random) }
         }
+        case 'better':
+            return { moves, answers, answer: data.answer, labels: data.labels }
+        case 'tenuki':
+            return { moves, answers, answer: data.answer }
         default:
             return { moves, answers }
     }
 }
 
-const KINDS = ['next', 'punish', 'shape', 'path']
+const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki']
+
+// --- Who's Better? -----------------------------------------------------------------
+
+// Josekipedia's verdict labels: good / slightly good for one side, the other side collapsing, even
+const OUTCOME_LABELS = { black: [2, 46, 20], white: [1, 47, 21], even: [45] }
+export const OUTCOMES = Object.keys(OUTCOME_LABELS)
+
+/** 'black' | 'white' | 'even' from a move's labels, or null if they don't say (or disagree). */
+export function outcomeOf(labels) {
+    const found = OUTCOMES.filter((outcome) => OUTCOME_LABELS[outcome].some((label) => labels.includes(label)))
+    return found.length === 1 ? found[0] : null
+}
+
+/**
+ * "Who's better?" problem: a position Josekipedia gives a verdict on (good for Black, even, good
+ * for White). The answer is chosen first, evenly, and then searched for, since most verdicts are
+ * "even"; returns null if this walk doesn't find one.
+ * Returns { moves, answer, labels } or null.
+ */
+export async function generateWhosBetter({ startMoves, color, firstTen, getNode, random = Math.random }) {
+    const want = pick(OUTCOMES, random)
+    const found = []
+    await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
+        // The verdicts are on the moves from here, which the node already lists
+        for (const child of state.node.children) {
+            if (child.move === PASS || state.moves.length + 1 < MIN_MOVES || outcomeOf(child.labels) !== want) { continue }
+            if (isLegal(state.position, child)) { found.push({ state, child }) }
+        }
+        return found.length > 0
+    })
+    if (!found.length) { return null }
+    const { state, child } = pick(found, random)
+    return { moves: [...state.moves, child.move], answer: want, labels: child.labels }
+}
+
+// --- Tenuki-able? -------------------------------------------------------------------
+
+const NECESSARY_LABEL = 15
+
+/**
+ * Whether `color` can tenuki in this position, by Josekipedia, or null if it doesn't say.
+ * Yes: a "can tenuki" label, or tenuki recorded as a joseki (ideal/good) move. No: tenuki recorded
+ * as a bad move, or a local move marked "Necessary". (A missing label isn't evidence either way.)
+ */
+export function tenukiVerdict(node, color) {
+    const pass = node.children.find((child) => child.move === PASS && child.color === color)
+    const necessary = node.children.some((child) => child.color === color && child.move !== PASS && child.labels.includes(NECESSARY_LABEL))
+    const no = pass?.type === MoveType.BAD || necessary
+    const yes = node.labels.includes(TENUKI_LABEL[color]) || pass?.type === MoveType.IDEAL || pass?.type === MoveType.GOOD
+    if (yes === no) { return null } // No evidence, or contradictory evidence
+    return yes ? 'yes' : 'no'
+}
+
+/**
+ * "Tenuki-able?" problem: a position where Josekipedia says whether the side to play can play
+ * elsewhere. It asks about whoever's turn it is (the player doesn't place stones here), which
+ * doubles the positions available. Yes and no are chosen evenly first, as "no" is much rarer in
+ * the data; returns null if this walk doesn't find the chosen answer.
+ * Returns { moves, answer, color } (the side being asked about) or null.
+ */
+export async function generateTenuki({ startMoves, firstTen, getNode, random = Math.random }) {
+    const want = random() < 0.5 ? 'yes' : 'no'
+    const found = []
+    await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
+        const suitable = state.moves.length >= MIN_MOVES && tenukiVerdict(state.node, state.position.toPlay) === want
+        if (suitable) { found.push(state) }
+        return suitable
+    })
+    if (!found.length) { return null }
+    const chosen = pick(found, random)
+    return { moves: chosen.moves, answer: want, color: chosen.position.toPlay }
+}
 
 /** A saved problem ({ kind, moves, color, data }) as a compact, URL-safe string, for sharing. */
 export function encodeProblem({ kind, moves, color, data }) {

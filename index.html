@@ -40,6 +40,10 @@
             <div id="board-loading" hidden><span class="spinner large" aria-hidden="true"></span></div>
         </div>
         <div id="path-choices" hidden></div>
+        <div id="answer-choices" hidden>
+            <div id="answer-buttons"></div>
+            <p id="answer-explanation"></p>
+        </div>
         <p class="hint" id="board-hint">Right-click a stone to return to that move.</p>
         <div id="toasts" aria-live="polite"></div>
     </section>
@@ -81,6 +85,8 @@
             <li title="The computer makes a mistake or plays a trick move; find the move that punishes it."><label><input type="checkbox" data-problem-type="punish"> Punish</label></li>
             <li title="Faded stones show the shape a joseki ends in; find the move that starts it."><label><input type="checkbox" data-problem-type="shape"> Final Shape</label></li>
             <li title="Several sequences are shown; only one is joseki. Spot it."><label><input type="checkbox" data-problem-type="path"> Pick the Path</label></li>
+            <li title="Judge a position the way Josekipedia does: is Black better, White better, or is it even?"><label><input type="checkbox" data-problem-type="better"> Who’s Better?</label></li>
+            <li title="Can the player whose turn it is play elsewhere?"><label><input type="checkbox" data-problem-type="tenuki"> Tenuki-able?</label></li>
         </ul>
         <h2 class="explore-only">Computer Plays</h2>
         <ul class="plain explore-only">

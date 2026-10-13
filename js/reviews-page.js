@@ -6,7 +6,9 @@ import { renderShape } from './shape-view.js'
 import { ensureStoneGradients } from './board-view.js'
 
 const $ = (selector) => document.querySelector(selector)
-const KIND_NAMES = { next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path' }
+const KIND_NAMES = {
+    next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path', better: 'Who’s Better?', tenuki: 'Tenuki-able?',
+}
 
 const deck = new ReviewDeck()
 let lastRemoved = [] // For undo

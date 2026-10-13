@@ -593,3 +593,29 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 .shape-slot .spinner { color: var(--muted); }
 /* Dim whatever was on the board while a problem is being found, so it doesn't look current */
 #board-wrap:has(#board-loading:not([hidden])) #board { opacity: .35; transition: opacity .2s .25s; }
+
+/* --- Answer buttons (Who's Better?, Tenuki-able?) ---------------------------- */
+
+#answer-choices {
+    width: min(100%, calc(100vh - 9rem), 760px);
+    min-width: 280px;
+    margin-top: .75rem;
+}
+#answer-choices[hidden] { display: none; }
+#answer-buttons { display: flex; gap: .6rem; }
+#answer-buttons button {
+    flex: 1;
+    padding: .7em 1em;
+    font-size: 1.05rem;
+    font-weight: 600;
+    border-width: 2px;
+}
+#answer-buttons button:disabled { opacity: 1; cursor: default; }
+#answer-buttons button.correct { border-color: var(--ideal); color: var(--ideal); }
+#answer-buttons button.wrong { border-color: var(--bad); color: var(--bad); }
+#answer-explanation { margin: .6rem 0 0; color: var(--muted); font-size: .9rem; }
+#answer-explanation:empty { display: none; }
+.tenuki-comment { display: block; margin-top: .3rem; font-style: italic; }
+
+/* Punish: an X on the mistake */
+.goban .last-move-cross { stroke: var(--bad); stroke-width: .11; stroke-linecap: round; fill: none; }
