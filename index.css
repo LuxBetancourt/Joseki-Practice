@@ -18,6 +18,7 @@
     --trick: #e08a00;
     --question: #8e44ad;
     --unknown: #888;
+    --mark: #0097b2; /* Points referenced from comments; distinct from every move-type color */
 
     color-scheme: light;
 }
@@ -33,6 +34,7 @@
         --button: #34312c;
         --button-hover: #403c36;
         --wood: #c9a35b;
+        --mark: #2cc6e0;
         color-scheme: dark;
     }
 }
@@ -90,7 +92,7 @@ kbd {
 }
 
 [title] { cursor: help; }
-[title] :is(input, label, button) { cursor: pointer; }
+[title] :is(input, label, button), :is(a, button)[title] { cursor: pointer; }
 
 /* --- Header ---------------------------------------------------------------- */
 
@@ -229,11 +231,9 @@ kbd {
 .goban .highlight.unknown { fill: var(--unknown); }
 .goban .mark {
     fill: none;
-    stroke: #e3262b;
-    stroke-width: .09;
-    animation: pulse 1s ease-in-out infinite alternate;
+    stroke: #0097b2;
+    stroke-width: .11;
 }
-@keyframes pulse { from { opacity: 1; } to { opacity: .35; } }
 .goban :is(.highlights, .stones, .marks) { pointer-events: none; }
 
 /* --- Toasts ---------------------------------------------------------------- */
@@ -323,10 +323,20 @@ label { cursor: pointer; }
 .tag { background: var(--button); border: 1px solid var(--border); }
 #move-comment { white-space: pre-line; overflow-wrap: anywhere; margin-top: .5rem; }
 .coord-ref {
+    font: inherit;
     font-weight: 600;
-    color: var(--bad);
+    color: var(--mark);
+    background: none;
+    border: 0;
     border-bottom: 1px dotted currentColor;
-    cursor: default;
+    border-radius: 0;
+    padding: 0 .1em;
+}
+.coord-ref:hover:not(:disabled) { background: none; border-bottom-style: solid; }
+.coord-ref.pinned, .coord-ref.pinned:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--mark) 18%, transparent);
+    border-bottom-style: solid;
+    border-radius: 3px 3px 0 0;
 }
 
 /* --- Modes & problems ------------------------------------------------------ */

@@ -381,10 +381,40 @@ function setupPosition(moves) {
 
 const capitalize = (s) => s[0].toUpperCase() + s.slice(1)
 
+// Points marked on the board from the move comment (pinned by clicking) or while hovering a
+// reference. Pins belong to the position they were made in.
+const marks = { entry: null, pinned: new Set(), hover: null }
+
+function currentMarks() {
+    const coords = new Set(marks.pinned)
+    if (marks.hover) { coords.add(marks.hover) }
+    return [...coords].map(fromSgf)
+}
+
+function setHoverMark(coord) {
+    marks.hover = coord
+    view.render({ marks: currentMarks() })
+}
+
+function togglePinnedMark(coord) {
+    if (marks.pinned.has(coord)) { marks.pinned.delete(coord) }
+    else { marks.pinned.add(coord) }
+    for (const ref of document.querySelectorAll(`.coord-ref[data-coord="${coord}"]`)) {
+        ref.classList.toggle('pinned', marks.pinned.has(coord))
+        ref.setAttribute('aria-pressed', marks.pinned.has(coord))
+    }
+    view.render({ marks: currentMarks() })
+}
+
 function render() {
     const entry = currentEntry()
     const { position } = entry
     const lastMove = entry.move && fromSgf(entry.move.coord)
+    if (marks.entry !== entry) {
+        marks.entry = entry
+        marks.pinned.clear()
+        marks.hover = null
+    }
 
     const toHighlight = (move, type) => ({ ...fromSgf(move), type: MOVE_TYPE_NAMES[type] || 'unknown' })
     let highlights = []
@@ -397,7 +427,7 @@ function render() {
             .filter((child) => child.color === position.toPlay)
             .map((child) => toHighlight(child.move, child.type))
     }
-    view.render({ position, lastMove, highlights: highlights.filter((h) => h.x !== undefined) })
+    view.render({ position, lastMove, highlights: highlights.filter((h) => h.x !== undefined), marks: currentMarks() })
 
     $('#undo').disabled = current === 0
     $('#redo').disabled = current === history.length - 1
@@ -478,8 +508,8 @@ function followUpCard(child, position, key) {
     card.append(slot, caption)
 
     const point = fromSgf(child.move)
-    card.addEventListener('mouseenter', () => view.render({ marks: [point] }))
-    card.addEventListener('mouseleave', () => view.render({ marks: [] }))
+    card.addEventListener('mouseenter', () => setHoverMark(child.move))
+    card.addEventListener('mouseleave', () => setHoverMark(null))
 
     lineAfter(child, position).then((line) => {
         if (followUpsKey !== key) { return }
@@ -593,13 +623,19 @@ function renderSegment(segment) {
             return button
         }
         case 'coord': {
-            const span = document.createElement('span')
-            span.className = 'coord-ref'
-            span.textContent = segment.label
-            const point = fromSgf(segment.coord)
-            span.addEventListener('mouseenter', () => view.render({ marks: [point] }))
-            span.addEventListener('mouseleave', () => view.render({ marks: [] }))
-            return span
+            const button = document.createElement('button')
+            button.type = 'button'
+            button.className = 'coord-ref'
+            button.dataset.coord = segment.coord
+            button.textContent = segment.label
+            button.title = 'Mark on the board'
+            const pinned = marks.pinned.has(segment.coord)
+            button.classList.toggle('pinned', pinned)
+            button.setAttribute('aria-pressed', pinned)
+            button.addEventListener('mouseenter', () => setHoverMark(segment.coord))
+            button.addEventListener('mouseleave', () => setHoverMark(null))
+            button.addEventListener('click', () => togglePinnedMark(segment.coord))
+            return button
         }
         case 'url': {
             const a = document.createElement('a')
