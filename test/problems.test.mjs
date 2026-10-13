@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -218,4 +218,28 @@ test('problems survive being saved as plain data and rebuilt', async () => {
 test('rebuilding fails clearly when the position is no longer in Josekipedia', async () => {
     const saved = { kind: 'next', moves: ['pd', 'zz'], color: BLACK, data: {} }
     await assert.rejects(rebuildProblem(saved, { getNode: treeGetter(pathTree()) }), StaleProblemError)
+})
+
+test('problem links round-trip, including Pick the Path data', async () => {
+    const tree = pathTree({
+        44: [{ id: 45, move: 'qd', color: B, type: 0 }, { id: 92, move: 'rd', color: B, type: 2 }],
+        92: [{ id: 93, move: 'qd', color: W, type: 0 }],
+    })
+    const getNode = treeGetter(tree)
+    const found = await generatePickPath({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.1, 0.6, 0.3]) })
+    const spec = { kind: 'path', moves: found.moves, color: BLACK, data: problemData('path', found) }
+
+    const text = encodeProblem(spec)
+    assert.match(text, /^[A-Za-z0-9_-]+$/, 'safe to put in a URL')
+    const decoded = decodeProblem(text)
+    assert.deepEqual(decoded, JSON.parse(JSON.stringify(spec)))
+
+    const rebuilt = await rebuildProblem(decoded, { getNode })
+    assert.equal(rebuilt.options.length, found.options.length)
+})
+
+test('problem links reject anything else', () => {
+    for (const bad of ['', 'not-base64!', btoa('{"k":"nope","m":"pd","c":1,"d":{}}'), btoa('{"k":"next","m":"zz","c":1,"d":{}}'), btoa('{"k":"next","m":"pd","c":3,"d":{}}')]) {
+        assert.throws(() => decodeProblem(bad), undefined, bad)
+    }
 })

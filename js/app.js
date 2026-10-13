@@ -1,6 +1,9 @@
 import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError } from './problems.js'
+import {
+    generateNextMove, generatePunish, generateFinalShape, generatePickPath,
+    problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem,
+} from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
@@ -427,14 +430,7 @@ async function newProblem() {
             toast(`Couldn’t find a ${which} problem from this starting point.${suggestion}`, 'warning', { label: 'Try Again', action: () => newProblem() })
             return
         }
-        setupPosition(found.moves)
-        problem = {
-            ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [], step: 0, missed: false, hint: false,
-            spec: { kind, moves: found.moves, color: reviewColor || humanColor(), data: problemData(kind, found) },
-            reviewKey,
-        }
-        ++generation
-        advance()
+        presentProblem(found, kind, { reviewKey, color: reviewColor || humanColor() })
     }
     catch (error) {
         if (gen !== generation) { return }
@@ -442,6 +438,18 @@ async function newProblem() {
         setBusy(false)
         toast('Couldn’t load data from Josekipedia.', 'error', { label: 'Retry', action: () => newProblem() })
     }
+}
+
+/** Puts a generated or rebuilt problem on the board. */
+function presentProblem(found, kind, { reviewKey = null, color = humanColor() } = {}) {
+    setupPosition(found.moves)
+    problem = {
+        ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [], step: 0, missed: false, hint: false,
+        spec: { kind, moves: found.moves, color, data: problemData(kind, found) },
+        reviewKey,
+    }
+    ++generation
+    advance()
 }
 
 /** Loads info for the current position, gives feedback and lets the computer reply if it's its turn. */
@@ -1312,28 +1320,82 @@ function begin() {
 
 // --- Shareable links -------------------------------------------------------------
 // In Explore mode the URL's hash holds the moves to the current position (#path=pdqfnc), so the
-// address can be bookmarked or shared. Problem modes leave it out, as it could give answers away.
+// address can be bookmarked or shared. Problem modes leave it out, as it could give answers away,
+// but Copy link gives a link to the current problem (#problem=..., see encodeProblem).
 
 const PATH_HASH = /^#path=((?:[a-t]{2})+)$/
+const PROBLEM_HASH = /^#problem=([A-Za-z0-9_-]+)$/
 
 function updateUrl(entry) {
-    $('#copy-link').disabled = !entry.path
+    const explore = settings.mode === 'explore'
+    $('#copy-link').disabled = explore ? !entry.path : !problem
+    $('#copy-link').title = explore ? 'Copy a link to this position' : 'Copy a link to this problem'
     const hash = settings.mode === 'explore' && entry.path ? `#path=${entry.path}` : ''
     if (location.hash !== hash) { // window.history: `history` here is the game's move list
         window.history.replaceState(null, '', hash || location.pathname + location.search)
     }
 }
 
-const shareUrl = () => `${location.origin}${location.pathname}#path=${currentEntry().path}`
+const shareUrl = () => `${location.origin}${location.pathname}${settings.mode === 'explore'
+    ? `#path=${currentEntry().path}`
+    : `#problem=${encodeProblem(problem.spec)}`}`
 
 async function copyLink() {
     const url = shareUrl()
+    const what = settings.mode === 'explore' ? 'position' : 'problem'
     try {
         await navigator.clipboard.writeText(url)
-        toast('Link to this position copied.', 'success')
+        toast(`Link to this ${what} copied.`, 'success')
     }
     catch {
-        prompt('Copy this link to share the position:', url) // Clipboard unavailable
+        prompt(`Copy this link to share the ${what}:`, url) // Clipboard unavailable
+    }
+}
+
+/**
+ * If the URL holds a shared problem, opens it in Problems mode, played as the color it was made
+ * for (whatever problem types are turned on). Returns true if it did.
+ */
+function openSharedProblem() {
+    const match = PROBLEM_HASH.exec(location.hash)
+    if (!match) { return false }
+    let spec
+    try { spec = decodeProblem(match[1]) }
+    catch {
+        toast('That problem link doesn’t work. It may have been cut short when it was copied.', 'error')
+        return false
+    }
+
+    const previousPlayer = settings.player
+    settings.mode = 'problems'
+    settings.player = colorName(spec.color)
+    saveSettings()
+    document.querySelectorAll('input[name="mode"]').forEach((input) => { input.checked = input.value === 'problems' })
+    document.querySelectorAll('input[name="player"]').forEach((input) => { input.checked = input.value === settings.player })
+    applyMode()
+    loadSharedProblem(spec, previousPlayer)
+    return true
+}
+
+async function loadSharedProblem(spec, previousPlayer) {
+    const gen = ++generation
+    problem = null
+    freePlay = false
+    if (!history.length) { setupPosition([]) }
+    clearToasts()
+    setBusy(true)
+    try {
+        const found = await rebuildProblem(spec, { getNode })
+        if (gen !== generation) { return }
+        presentProblem(found, spec.kind, { color: spec.color })
+        const color = settings.player !== previousPlayer ? ` You’re playing ${capitalize(settings.player)}.` : ''
+        toast(`Opened a shared ${PROBLEM_TYPE_NAMES[spec.kind]} problem.${color}`)
+    }
+    catch (error) {
+        if (gen !== generation) { return }
+        setBusy(false)
+        const message = error instanceof StaleProblemError ? 'That problem is no longer in Josekipedia.' : 'Couldn’t load that problem.'
+        toast(message, 'error', { label: 'New Problem', action: () => newProblem() })
     }
 }
 
@@ -1365,8 +1427,10 @@ function openSharedPosition() {
 window.addEventListener('hashchange', () => {
     // Our own updates use replaceState, which doesn't fire this; it's a pasted or edited link
     if (PATH_HASH.test(location.hash) && location.hash.slice(6) !== currentEntry()?.path) { openSharedPosition() }
+    else if (PROBLEM_HASH.test(location.hash)) { openSharedProblem() }
 })
 
 buildStartingPoints()
 bindControls()
-if (!openSharedPosition()) { begin() } // A shared link (or a reload in Explore) opens its position
+// A shared link (or a reload in Explore) opens its position or problem
+if (!openSharedPosition() && !openSharedProblem()) { begin() }

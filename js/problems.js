@@ -1,7 +1,7 @@
 // Generates problems by walking random joseki lines through Josekipedia.
 // Each step costs one node lookup, so walks stop at a random target depth.
 
-import { Position, PASS, SIZE, EMPTY, fromSgf, toSgf, opponent } from './go.js'
+import { Position, PASS, SIZE, EMPTY, BLACK, WHITE, fromSgf, toSgf, opponent } from './go.js'
 import { ROOT_ID, MoveType } from './josekipedia.js'
 import { CLASSIC_OPENINGS } from './starting-points.js'
 import { mainLine } from './lines.js'
@@ -286,4 +286,23 @@ export async function rebuildProblem({ kind, moves, color, data }, { getNode, ra
         default:
             return { moves, answers }
     }
+}
+
+const KINDS = ['next', 'punish', 'shape', 'path']
+
+/** A saved problem ({ kind, moves, color, data }) as a compact, URL-safe string, for sharing. */
+export function encodeProblem({ kind, moves, color, data }) {
+    const json = JSON.stringify({ k: kind, m: moves.join(''), c: color, d: data })
+    return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+/** The reverse of encodeProblem. Throws if the text isn't a problem link. */
+export function decodeProblem(text) {
+    const base64 = text.replace(/-/g, '+').replace(/_/g, '/')
+    const { k, m, c, d } = JSON.parse(atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4)))
+    if (!KINDS.includes(k) || typeof m !== 'string' || !/^(?:[a-t]{2})+$/.test(m)
+        || (c !== BLACK && c !== WHITE) || typeof d !== 'object' || d === null) {
+        throw new Error('Not a problem link')
+    }
+    return { kind: k, moves: m.match(/../g), color: c, data: d }
 }
