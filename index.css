@@ -659,7 +659,7 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 
 /* Who's Better?: stones are translucent; hovering a stone lights up that whole side */
 .goban.fade-stones { cursor: pointer; }
-.goban.fade-stones .stone { opacity: .4; transition: opacity .12s; }
+.goban.fade-stones .stone { opacity: .6; transition: opacity .12s; }
 .goban.fade-stones[data-lit="black"] .stone.black,
 .goban.fade-stones[data-lit="white"] .stone.white { opacity: 1; }
 #board-wrap.answer-on-board #board { outline: 3px solid var(--accent); outline-offset: -3px; }
