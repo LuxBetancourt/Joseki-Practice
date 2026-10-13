@@ -352,10 +352,10 @@ function stashSpare(kind, problem) {
     spares.set(key, list)
 }
 
-/** A stashed problem with this answer from the given starting point, removed from the stash. */
-function takeSpare(kind, answer, startMoves) {
+/** A stashed problem with this answer from the given starting point (and for `color`, if it says), removed from the stash. */
+function takeSpare(kind, answer, startMoves, color) {
     const list = spares.get(`${kind}:${answer}`) || []
-    const index = list.findIndex((p) => startMoves.every((move, i) => p.moves[i] === move))
+    const index = list.findIndex((p) => startMoves.every((move, i) => p.moves[i] === move) && (!color || p.color === color))
     return index === -1 ? null : list.splice(index, 1)[0]
 }
 
@@ -442,9 +442,8 @@ function inferredNoMove(node, color) {
 }
 
 /**
- * "Tenuki-able?" problem: a position where the side to play can or can't play elsewhere. It asks
- * about whoever's turn it is (the player doesn't place stones here), which doubles the positions
- * available. The answer is chosen first (see AIM_FOR_YES). Recorded evidence (tenukiVerdict) is preferred;
+ * "Tenuki-able?" problem: a position where `color` is to play and can or can't play elsewhere.
+ * The answer is chosen first (see AIM_FOR_YES). Recorded evidence (tenukiVerdict) is preferred;
  * failing that, "no" is inferred from the joseki carrying on locally (see inferredNoMove).
  * Returns { moves, answer, color, inferredFrom? } (the side asked about, and for an inferred "no"
  * the local move the joseki continues with) or null.
@@ -455,12 +454,11 @@ export async function generateTenuki(options) {
     return await findTenuki(want, options) || await findTenuki(want, options)
 }
 
-async function findTenuki(want, { startMoves, firstTen, getNode, random = Math.random }) {
+async function findTenuki(want, { startMoves, color, firstTen, getNode, random = Math.random }) {
     const recorded = [] // Positions with recorded evidence either way: the wanted ones are used, the rest stashed
     const inferred = []
     await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
-        if (state.moves.length < MIN_MOVES) { return false }
-        const color = state.position.toPlay
+        if (state.moves.length < MIN_MOVES || state.position.toPlay !== color) { return false }
         const answer = tenukiVerdict(state.node, color)
         if (answer) { recorded.push({ moves: state.moves, answer, color }) }
         if (answer === want) { return true }
@@ -480,10 +478,10 @@ async function findTenuki(want, { startMoves, firstTen, getNode, random = Math.r
         const continues = !after.labels.includes(SETTLED_LABEL)
             && after.children.some((child) => child.color !== move.color && child.type === MoveType.IDEAL && child.move !== PASS)
         if (continues) {
-            return { moves: state.moves, answer: 'no', color: state.position.toPlay, inferredFrom: move.move }
+            return { moves: state.moves, answer: 'no', color, inferredFrom: move.move }
         }
     }
-    return takeSpare('tenuki', want, startMoves)
+    return takeSpare('tenuki', want, startMoves, color)
 }
 
 // Problem links: a letter for the kind, one for the color, the moves, then anything that can't be

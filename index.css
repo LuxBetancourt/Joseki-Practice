@@ -680,3 +680,17 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     pointer-events: none;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
 }
+
+/* Tenuki-able?: the question goes on the board, and a stone shows which side it's about */
+.stone-icon {
+    display: inline-block;
+    width: .9em;
+    height: .9em;
+    margin-right: .45em;
+    border-radius: 50%;
+    vertical-align: -.1em;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .45);
+}
+.stone-icon.black { background: radial-gradient(circle at 35% 35%, #555, #111 70%); }
+.stone-icon.white { background: radial-gradient(circle at 35% 35%, #fff, #ccc 80%); }
+#board-wrap.view-only #answer-hint.question { font-size: 1.05rem; padding: .3em 1.1em; }

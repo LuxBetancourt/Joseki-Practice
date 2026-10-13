@@ -290,7 +290,7 @@ test('tenuki-able: the evidence rules', () => {
 test('tenuki-able: infers "no" when nothing allows tenuki and the joseki carries on locally', async () => {
     // pathTree: after pd qf nc qc, black qd, white pc, black od; no tenuki evidence anywhere
     const getNode = treeGetter(pathTree())
-    const problem = await generateTenuki({ startMoves: START, firstTen: true, getNode, random: sequence([0.7]) })
+    const problem = await generateTenuki({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.7]) })
     assert.equal(problem.answer, 'no')
     assert.ok(problem.inferredFrom, 'says which local move it inferred from')
     // The inferred move is the side to play's joseki move, and the sequence carries on after it
@@ -302,7 +302,7 @@ test('tenuki-able: infers "no" when nothing allows tenuki and the joseki carries
 
 test('tenuki-able: an inferred "no" needs the sequence to carry on', async () => {
     const tree = pathTree({ 45: [] }) // after qd the line stops
-    const problem = await generateTenuki({ startMoves: START, firstTen: true, getNode: treeGetter(tree), random: sequence([0.7]) })
+    const problem = await generateTenuki({ startMoves: START, color: BLACK, firstTen: true, getNode: treeGetter(tree), random: sequence([0.7]) })
     assert.equal(problem, null)
 })
 
@@ -364,5 +364,17 @@ test('short problem links for every kind, and older JSON links still open', asyn
     assert.deepEqual(decodeProblem(legacy), { kind: 'next', moves, color: BLACK, data: {} })
     for (const bad of ['sbpdqfnc', 'sbpdqfnc.qc.qd', 'lbpdqfnc', 'lbpdqfnc.x', 'nbpdqfnc.qc', 'nbpdq']) {
         assert.throws(() => decodeProblem(bad), undefined, bad)
+    }
+})
+
+test('tenuki-able: only asks about the given color', async () => {
+    // pathTree: after pd qf nc qc it's Black's turn, then White's after qd
+    const getNode = treeGetter(pathTree())
+    for (let i = 0; i < 5; i++) {
+        const problem = await generateTenuki({ startMoves: START, color: WHITE, firstTen: true, getNode, random: sequence([0.7, 0.2, 0.5]) })
+        if (problem) {
+            assert.equal(problem.color, WHITE)
+            assert.equal(problem.moves.length % 2, 1, 'White to play')
+        }
     }
 })

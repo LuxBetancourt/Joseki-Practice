@@ -108,7 +108,7 @@ const PROBLEM_TYPE_NAMES = {
 // Problems answered with buttons rather than on the board, and the answers they offer
 const ANSWER_CHOICES = {
     better: [['black', 'Black is better'], ['even', 'Even'], ['white', 'White is better']],
-    tenuki: [['yes', 'Yes'], ['no', 'No']],
+    tenuki: [['yes', 'Tenuki is fine'], ['no', 'Must play locally']], // Shown with a stone of the side asked about
 }
 const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => settings.problemTypes[kind])
 
@@ -750,9 +750,7 @@ function render() {
     // Look, don't play (see .view-only); Who's Better? is answered by clicking the stones instead
     $('#board-wrap').classList.toggle('view-only', answeredWithButtons() && !answeredOnBoard())
     $('#board-wrap').classList.toggle('answer-on-board', answeredOnBoard())
-    $('#answer-hint').textContent = answeredOnBoard()
-        ? 'Click a side’s stones for who’s better, or an empty point for even'
-        : '↓ Answer with the buttons below'
+    renderAnswerHint()
     $('#undo').disabled = current === 0 || navigationLocked()
     $('#redo').disabled = current === history.length - 1 || navigationLocked()
     $('#pass').disabled = !canPlayOnBoard()
@@ -789,6 +787,30 @@ const answeredWithButtons = () => Boolean(problemPending() && ANSWER_CHOICES[pro
 /** Who's Better? can also be answered by clicking a side's stones (or an empty point for even). */
 const answeredOnBoard = () => answeredWithButtons() && problem.kind === 'better'
 
+/** A small stone of `color`, to put next to text about that side. */
+function stoneIcon(color) {
+    const icon = document.createElement('span')
+    icon.className = `stone-icon ${colorName(color)}`
+    icon.setAttribute('aria-hidden', 'true')
+    return icon
+}
+
+/** The label on the board that says how to answer (and, for Tenuki-able?, the question itself). */
+function renderAnswerHint() {
+    const hint = $('#answer-hint')
+    const tenuki = answeredWithButtons() && problem.kind === 'tenuki'
+    hint.classList.toggle('question', tenuki)
+    if (tenuki) {
+        const color = problem.spec.color
+        hint.replaceChildren(stoneIcon(color), `Can ${capitalize(colorName(color))} tenuki here?`, ' ↓')
+    }
+    else {
+        hint.textContent = answeredOnBoard()
+            ? 'Click a side’s stones for who’s better, or an empty point for even'
+            : '↓ Answer with the buttons below'
+    }
+}
+
 /** A click on the board in a button-answered problem: bring the buttons into view and pulse them. */
 function nudgeAnswerButtons() {
     const buttons = $('#answer-buttons')
@@ -811,6 +833,7 @@ function renderAnswerChoices() {
             button.type = 'button'
             button.dataset.value = value
             button.textContent = label
+            if (problem.kind === 'tenuki') { button.prepend(stoneIcon(problem.spec.color)) }
             button.addEventListener('click', () => gradeAnswerChoice(value))
             return button
         }))
