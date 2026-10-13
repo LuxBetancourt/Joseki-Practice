@@ -5,6 +5,7 @@ import {
     problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem,
 } from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
+import { orderKinds, addRecentKind } from './problem-mix.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath, cleanText } from './text.js'
@@ -58,6 +59,22 @@ function loadSettings() {
 
 function saveSettings() {
     try { localStorage.setItem('settings', JSON.stringify(settings)) }
+    catch { /* storage unavailable */ }
+}
+
+// The types of the last few problems (oldest first), so types that haven't come up lately can be
+// favored (see problem-mix.js). Kept across visits, as a session is often only a few problems.
+let recentKinds = (() => {
+    try {
+        const saved = JSON.parse(localStorage.getItem('recentKinds'))
+        return Array.isArray(saved) ? saved.filter((kind) => typeof kind === 'string') : []
+    }
+    catch { return [] }
+})()
+
+function noteRecentKind(kind) {
+    recentKinds = addRecentKind(recentKinds, kind)
+    try { localStorage.setItem('recentKinds', JSON.stringify(recentKinds)) }
     catch { /* storage unavailable */ }
 }
 
@@ -434,13 +451,14 @@ async function newProblem() {
         }
         if (gen !== generation) { return }
 
-        // New problems: random lines often end early in tenuki, so try several times. The chosen
-        // type gets a few walks before moving on to the next, as some types fail far more often
-        // than others and would otherwise hand their turns to the reliable ones
+        // New problems: random lines often end early in tenuki, so try several times. Types that
+        // haven't come up lately go first (see problem-mix.js). Each gets a few walks before moving
+        // on to the next, as some types fail far more often than others and would otherwise hand
+        // their turns to the reliable ones
         const kinds = enabledProblemTypes()
-        const first = Math.floor(Math.random() * kinds.length)
+        const order = orderKinds(kinds, recentKinds)
         for (let attempt = 0; attempt < TRIES_PER_TYPE * 4 && !found && gen === generation; ++attempt) {
-            kind = kinds[(first + Math.floor(attempt / TRIES_PER_TYPE)) % kinds.length]
+            kind = order[Math.floor(attempt / TRIES_PER_TYPE) % order.length]
             found = await GENERATORS[kind](options)
         }
         if (gen !== generation) { return }
@@ -474,6 +492,7 @@ function presentProblem(found, kind, { reviewKey = null, color = humanColor(), l
         reviewKey,
         link, // Opened from a link: keep it, as rebuilding can reorder Pick the Path's sequences
     }
+    noteRecentKind(kind) // Reviews and links count too: they're practice of that type all the same
     ++generation
     advance()
 }
