@@ -52,7 +52,7 @@ export class BoardView {
     constructor(svg, handlers) {
         this.svg = svg
         this.handlers = handlers
-        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null }
+        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null, fadeStones: false }
         this.hoverPoint = null
 
         const size = SIZE - 1 + 2 * MARGIN
@@ -120,6 +120,14 @@ export class BoardView {
     setHover(point) {
         this.hoverPoint = point
         this.updateGhost()
+        this.updateLitSide()
+    }
+
+    /** With fadeStones on, hovering a stone lights up that whole side (see .fade-stones in CSS). */
+    updateLitSide() {
+        const { position, fadeStones } = this.state
+        const color = fadeStones && this.hoverPoint && position ? position.at(this.hoverPoint.x, this.hoverPoint.y) : EMPTY
+        this.svg.dataset.lit = color === EMPTY ? '' : colorName(color)
     }
 
     updateGhost() {
@@ -143,10 +151,13 @@ export class BoardView {
      *   highlights: [{x, y, type}] candidate moves; type is a CSS class suffix
      *   marks:      [{x, y, shape}] marked points; shape is 'triangle', 'square' or 'circle'
      *   target:     Position | null; stones it adds are drawn faded, stones it lacks are crossed out
+     *   fadeStones: boolean; stones are translucent, and hovering one lights up its whole side
      */
     render(state) {
         Object.assign(this.state, state)
-        const { position, lastMove, highlights, marks, target } = this.state
+        const { position, lastMove, highlights, marks, target, fadeStones } = this.state
+        this.svg.classList.toggle('fade-stones', fadeStones)
+        this.updateLitSide()
 
         const stones = []
         const removed = []

@@ -141,7 +141,12 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const view = new BoardView($('#board'), {
     onPlay: (x, y) => {
-        if (canPlayOnBoard()) { playMove(toSgf(x, y), { byHuman: true }) }
+        if (answeredOnBoard()) {
+            // Who's Better?: a side's stone picks that side, an empty point picks even
+            const color = currentEntry().position.at(x, y)
+            gradeAnswerChoice(color === BLACK ? 'black' : color === WHITE ? 'white' : 'even')
+        }
+        else if (canPlayOnBoard()) { playMove(toSgf(x, y), { byHuman: true }) }
         else if (answeredWithButtons()) { nudgeAnswerButtons() }
     },
     onContextMenu: returnToMove,
@@ -733,13 +738,19 @@ function render() {
         highlights: highlights.filter((h) => h.x !== undefined),
         marks: currentMarks(),
         target,
+        fadeStones: answeredOnBoard(),
     })
 
     // Pick the Path shows only the sequences, not the board
     const pathProblem = problem?.kind === 'path' && current >= problem.index
     $('#board-wrap').hidden = pathProblem
     $('#board-hint').hidden = pathProblem
-    $('#board-wrap').classList.toggle('view-only', answeredWithButtons()) // Look, don't play: see .view-only
+    // Look, don't play (see .view-only); Who's Better? is answered by clicking the stones instead
+    $('#board-wrap').classList.toggle('view-only', answeredWithButtons() && !answeredOnBoard())
+    $('#board-wrap').classList.toggle('answer-on-board', answeredOnBoard())
+    $('#answer-hint').textContent = answeredOnBoard()
+        ? 'Click a side’s stones for who’s better, or an empty point for even'
+        : '↓ Answer with the buttons below'
     $('#undo').disabled = current === 0 || navigationLocked()
     $('#redo').disabled = current === history.length - 1 || navigationLocked()
     $('#pass').disabled = !canPlayOnBoard()
@@ -752,6 +763,7 @@ function render() {
     $('#status-text').textContent = showingWrongAnswer ? '' : busy
         ? (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
         : problemPending() && problem.kind === 'path' ? 'Choose a sequence below'
+        : answeredOnBoard() ? 'Click the board, or choose below'
         : problemPending() && ANSWER_CHOICES[problem.kind] ? 'Choose an answer below'
         : ['shape', 'path'].includes(problem?.kind) && problem.solved && !isHumanTurn() ? '' // The joseki is complete
             : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
@@ -772,6 +784,8 @@ let answerChoicesFor = null // The problem the buttons were built for
 
 /** True while a problem is waiting for an answer from the buttons rather than a move on the board. */
 const answeredWithButtons = () => Boolean(problemPending() && ANSWER_CHOICES[problem.kind] && current >= problem.index)
+/** Who's Better? can also be answered by clicking a side's stones (or an empty point for even). */
+const answeredOnBoard = () => answeredWithButtons() && problem.kind === 'better'
 
 /** A click on the board in a button-answered problem: bring the buttons into view and pulse them. */
 function nudgeAnswerButtons() {
