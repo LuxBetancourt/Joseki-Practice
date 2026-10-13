@@ -116,6 +116,7 @@ const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => setti
 // due reviews in; Review mode works through every due review.
 const deck = new ReviewDeck()
 const REVIEW_MIX = 1 / 3 // Chance that Next serves a due review instead of a new problem
+const TRIES_PER_TYPE = 4 // Random walks a problem type gets before Next moves on to another type
 const startPath = () => (settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start)
 const dueReviews = () => (settings.mode === 'review'
     ? deck.due()
@@ -433,12 +434,13 @@ async function newProblem() {
         }
         if (gen !== generation) { return }
 
-        // New problems: random lines often end early in tenuki, so try several times, going
-        // round the enabled types (from a random one) so each gets its turn before giving up
+        // New problems: random lines often end early in tenuki, so try several times. The chosen
+        // type gets a few walks before moving on to the next, as some types fail far more often
+        // than others and would otherwise hand their turns to the reliable ones
         const kinds = enabledProblemTypes()
         const first = Math.floor(Math.random() * kinds.length)
-        for (let attempt = 0; attempt < 8 && !found && gen === generation; ++attempt) {
-            kind = kinds[(first + attempt) % kinds.length]
+        for (let attempt = 0; attempt < TRIES_PER_TYPE * 4 && !found && gen === generation; ++attempt) {
+            kind = kinds[(first + Math.floor(attempt / TRIES_PER_TYPE)) % kinds.length]
             found = await GENERATORS[kind](options)
         }
         if (gen !== generation) { return }
