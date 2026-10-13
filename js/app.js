@@ -831,7 +831,13 @@ function renderProblemBar() {
 /** The Review mode label's due count, and the deck summary shown in Review mode. */
 function renderReviewStatus() {
     const dueCount = deck.due().length
-    $('label[for="mode-review"]').textContent = dueCount ? `Review (${dueCount})` : 'Review'
+    // A dot on the Review mode button when problems are due; the count is in its tooltip and for screen readers
+    const label = $('label[for="mode-review"]')
+    label.classList.toggle('has-due', dueCount > 0)
+    label.title = dueCount
+        ? `${dueCount} problem${dueCount === 1 ? '' : 's'} ready for review`
+        : 'Go through the problems you missed that are due again'
+    $('#review-due-count').textContent = dueCount ? `, ${dueCount} due` : ''
     $('#review-summary').textContent = !deck.size
         ? 'Missed problems are saved here for review.'
         : `${deck.size} saved · ${dueCount ? `${dueCount} due now` : `next due ${relativeTime(deck.nextDue())}`}`

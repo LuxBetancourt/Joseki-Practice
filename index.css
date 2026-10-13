@@ -476,3 +476,26 @@ body[data-mode="review"] .not-review { display: none; }
 #review-summary { margin: .6rem 0 0; color: var(--muted); font-size: .85rem; }
 #clear-reviews { font-size: .8rem; color: var(--muted); }
 #clear-reviews[hidden] { display: none; }
+
+/* Notification dot on the Review mode button when problems are due */
+.segmented label.has-due { position: relative; }
+.segmented label.has-due::after {
+    content: '';
+    position: absolute;
+    top: .3em;
+    right: .4em;
+    width: .5em;
+    height: .5em;
+    border-radius: 50%;
+    background: var(--bad);
+    box-shadow: 0 0 0 2px var(--button);
+}
+.segmented input:checked + label.has-due::after { box-shadow: 0 0 0 2px var(--accent); }
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
