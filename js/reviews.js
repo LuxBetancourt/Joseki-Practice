@@ -67,14 +67,20 @@ export class ReviewDeck {
     }
 
     /**
-     * Due items matching the player's current settings, most overdue first.
-     * @param {{ kinds: string[], color: number, startMoves: string[] }} filter
+     * Due items, most overdue first, optionally limited to some kinds, a color and a starting
+     * point (to match the player's settings).
+     * @param {{ kinds?: string[], color?: number, startMoves?: string[] }} filter
      */
-    due({ kinds, color, startMoves }) {
+    due({ kinds, color, startMoves = [] } = {}) {
         const now = this.now()
         return this.items
-            .filter((item) => item.due <= now && kinds.includes(item.kind) && item.color === color
+            .filter((item) => item.due <= now && (!kinds || kinds.includes(item.kind)) && (!color || item.color === color)
                 && startMoves.every((move, i) => item.moves[i] === move))
             .sort((a, b) => a.due - b.due)
+    }
+
+    /** When the next item is due (a timestamp), or null if the deck is empty. */
+    nextDue() {
+        return this.items.length ? Math.min(...this.items.map((item) => item.due)) : null
     }
 }

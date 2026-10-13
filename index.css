@@ -471,6 +471,8 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
 
 /* --- Reviews ---------------------------------------------------------------- */
 
-#review-summary { margin: 0; color: var(--muted); font-size: .85rem; }
+body:not([data-mode="review"]) .review-only { display: none; }
+body[data-mode="review"] .not-review { display: none; }
+#review-summary { margin: .6rem 0 0; color: var(--muted); font-size: .85rem; }
 #clear-reviews { font-size: .8rem; color: var(--muted); }
 #clear-reviews[hidden] { display: none; }

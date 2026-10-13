@@ -31,7 +31,6 @@
             <span id="problem-prompt"></span>
             <span id="score"></span>
             <button type="button" id="show-answer">Show Answer</button>
-            <button type="button" id="review-problems" title="Problems you missed that are due again (R)">Review</button>
             <button type="button" id="next-problem" class="primary" title="New problem (N)">Next</button>
         </div>
         <div id="board-wrap">
@@ -47,16 +46,21 @@
         <div class="segmented" role="radiogroup" aria-label="Mode">
             <input type="radio" name="mode" id="mode-explore" value="explore"><label for="mode-explore" title="Play against the computer from a starting point">Explore</label>
             <input type="radio" name="mode" id="mode-problems" value="problems"><label for="mode-problems" title="Solve problems taken from the selected starting point">Problems</label>
+            <input type="radio" name="mode" id="mode-review" value="review"><label for="mode-review" title="Go through the problems you missed that are due again">Review</label>
+        </div>
+        <div class="review-only" id="review-deck">
+            <p id="review-summary"></p>
+            <button type="button" class="link" id="clear-reviews" hidden>Clear saved reviews</button>
         </div>
 
-        <h2>Player</h2>
-        <div class="segmented" role="radiogroup" aria-label="Play as">
+        <h2 class="not-review">Player</h2>
+        <div class="segmented not-review" role="radiogroup" aria-label="Play as">
             <input type="radio" name="player" id="player-black" value="black"><label for="player-black">Black</label>
             <input type="radio" name="player" id="player-white" value="white"><label for="player-white">White</label>
         </div>
 
-        <h2>Starting Point</h2>
-        <form id="start-form">
+        <h2 class="not-review">Starting Point</h2>
+        <form id="start-form" class="not-review">
             <ul class="tree" id="starting-points">
                 <li><div class="tree-row"><span class="tree-spacer"></span><label><input type="radio" name="start" value="empty" checked>Empty Board</label></div></li>
                 <li id="demo-option" title="Play both colors freely. The computer won't respond and no joseki info is loaded.">
@@ -75,9 +79,6 @@
             <li title="Faded stones show the shape a joseki ends in; find the move that starts it."><label><input type="checkbox" data-problem-type="shape"> Final Shape</label></li>
             <li title="Several sequences are shown; only one is joseki. Spot it."><label><input type="checkbox" data-problem-type="path"> Pick the Path</label></li>
         </ul>
-        <h2 class="problems-only">Review</h2>
-        <p class="problems-only note" id="review-summary"></p>
-        <button type="button" class="problems-only link" id="clear-reviews" hidden>Clear saved reviews</button>
         <h2 class="explore-only">Computer Plays</h2>
         <ul class="plain explore-only">
             <li><label><input type="checkbox" data-setting="ideal"> <span class="swatch ideal"></span>Ideal moves</label></li>

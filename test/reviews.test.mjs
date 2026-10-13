@@ -90,3 +90,14 @@ test('shape problems with different targets are different reviews', () => {
     assert.notEqual(reviewKey(spec(['pd'], 'shape', 1, { answer: 'qc' })), reviewKey(spec(['pd'], 'shape', 1, { answer: 'nc' })))
     assert.equal(reviewKey(spec(['pd'], 'next')), reviewKey(spec(['pd'], 'next')))
 })
+
+test('with no filter, every due review counts, and nextDue says when the next one is', () => {
+    const { deck, clock } = makeDeck()
+    assert.equal(deck.nextDue(), null)
+    deck.recordMiss(spec(['pd', 'qf', 'nc'], 'next', 1))
+    clock.now += MINUTE
+    deck.recordMiss(spec(['qd', 'od', 'oc'], 'punish', 2))
+    assert.equal(deck.nextDue(), clock.now - MINUTE + 5 * MINUTE)
+    clock.now += 5 * MINUTE
+    assert.equal(deck.due().length, 2, 'both colors and kinds')
+})

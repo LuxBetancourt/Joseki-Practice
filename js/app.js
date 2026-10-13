@@ -58,7 +58,8 @@ function saveSettings() {
 }
 
 const settings = loadSettings()
-const humanColor = () => (settings.player === 'black' ? BLACK : WHITE)
+// In Review mode the player takes the color they missed the problem with
+const humanColor = () => (settings.mode === 'review' && problem ? problem.spec.color : settings.player === 'black' ? BLACK : WHITE)
 
 // --- Game state ----------------------------------------------------------------
 // history[i] is the position after i moves. Each entry's `node` is the Josekipedia node for
@@ -93,12 +94,24 @@ const GENERATORS = { next: generateNextMove, punish: generatePunish, shape: gene
 const PROBLEM_TYPE_NAMES = { next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path' }
 const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => settings.problemTypes[kind])
 
-// Problems the player missed come back for review (see reviews.js). Next mixes due reviews in;
-// the Review button serves only due reviews.
+// Problems the player missed come back for review (see reviews.js). In Problems mode, Next mixes
+// due reviews in; Review mode works through every due review.
 const deck = new ReviewDeck()
 const REVIEW_MIX = 1 / 3 // Chance that Next serves a due review instead of a new problem
 const startPath = () => (settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start)
-const dueReviews = () => deck.due({ kinds: enabledProblemTypes(), color: humanColor(), startMoves: splitPath(startPath()) })
+const dueReviews = () => (settings.mode === 'review'
+    ? deck.due()
+    : deck.due({ kinds: enabledProblemTypes(), color: humanColor(), startMoves: splitPath(startPath()) }))
+
+/** "in 5 minutes", "in 3 hours", "in 2 days"… for a future timestamp. */
+function relativeTime(time) {
+    const minutes = Math.max(1, Math.round((time - Date.now()) / 60000))
+    const [amount, unit] = minutes < 60 ? [minutes, 'minute']
+        : minutes < 48 * 60 ? [Math.round(minutes / 60), 'hour']
+            : minutes < 60 * 24 * 60 ? [Math.round(minutes / (24 * 60)), 'day']
+                : [Math.round(minutes / (30 * 24 * 60)), 'month']
+    return `in ${amount} ${unit}${amount === 1 ? '' : 's'}`
+}
 
 /** Updates the review deck with how the player did on their first attempt at the problem. */
 function recordFirstAttempt(correct) {
@@ -299,14 +312,18 @@ const problemPrompt = () => {
         : `${them}’s ${where} is a mistake. Punish it!`
 }
 
-/**
- * Loads a problem: a due review (always for the Review button, sometimes for Next) or a new one.
- * @param {{ review?: boolean }} options
- */
-async function newProblem({ review = false } = {}) {
+/** Loads a problem: in Review mode the most overdue review, in Problems mode sometimes a review. */
+async function newProblem() {
+    const review = settings.mode === 'review'
     const due = dueReviews()
     if (review && !due.length) {
-        toast('No reviews are due right now.')
+        // Nothing to review: clear the board; the problem bar says when the next one is due
+        ++generation
+        problem = null
+        freePlay = false
+        clearToasts()
+        setupPosition([])
+        render()
         return
     }
     const gen = ++generation
@@ -321,6 +338,7 @@ async function newProblem({ review = false } = {}) {
         let found = null
         let kind = null
         let reviewKey = null
+        let reviewColor = null
 
         // Reviews: rebuild the most overdue one that still fits Josekipedia
         const reviewing = review || (due.length && Math.random() < REVIEW_MIX) ? due : []
@@ -329,6 +347,7 @@ async function newProblem({ review = false } = {}) {
                 found = await rebuildProblem(item, { getNode })
                 kind = item.kind
                 reviewKey = item.key
+                reviewColor = item.color
                 break
             }
             catch (error) {
@@ -354,7 +373,7 @@ async function newProblem({ review = false } = {}) {
         setupPosition(found.moves)
         problem = {
             ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [],
-            spec: { kind, moves: found.moves, color: humanColor(), data: problemData(kind, found) },
+            spec: { kind, moves: found.moves, color: reviewColor || humanColor(), data: problemData(kind, found) },
             reviewKey,
         }
         ++generation
@@ -364,7 +383,7 @@ async function newProblem({ review = false } = {}) {
         if (gen !== generation) { return }
         console.error(error)
         setBusy(false)
-        toast('Couldn’t load data from Josekipedia.', 'error', { label: 'Retry', action: () => newProblem({ review }) })
+        toast('Couldn’t load data from Josekipedia.', 'error', { label: 'Retry', action: () => newProblem() })
     }
 }
 
@@ -601,6 +620,7 @@ function render() {
             : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
 
     renderProblemBar()
+    renderReviewStatus()
     renderPathChoices()
     renderMoveInfo(entry)
     renderFollowUps(entry)
@@ -793,10 +813,11 @@ function renderProblemBar() {
         prompt = { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.' }[problem.kind] || 'Solved! Keep playing, or get a new problem.'
     }
     else if (problem?.revealed) { prompt = problem.kind === 'shape' ? 'The answer is highlighted.' : 'Answers are highlighted.' }
-    else if (!problem && !busy) { prompt = 'No problem loaded. Try again, or choose another starting point.' }
+    else if (!problem && !busy) {
+        prompt = settings.mode === 'review' ? reviewEmptyPrompt() : 'No problem loaded. Try again, or choose another starting point.'
+    }
     $('#problem-prompt').textContent = prompt
     $('#show-answer').disabled = !problemPending() || busy
-    renderReviewStatus()
     const kinds = Object.keys(stats)
     const solved = kinds.reduce((sum, kind) => sum + stats[kind].solved, 0)
     const attempted = kinds.reduce((sum, kind) => sum + stats[kind].attempted, 0)
@@ -807,15 +828,21 @@ function renderProblemBar() {
         .join('\n')
 }
 
+/** The Review mode label's due count, and the deck summary shown in Review mode. */
 function renderReviewStatus() {
-    const dueCount = dueReviews().length
-    const button = $('#review-problems')
-    button.textContent = dueCount ? `Review (${dueCount})` : 'Review'
-    button.disabled = !dueCount || busy
-    $('#review-summary').textContent = deck.size
-        ? `${dueCount} due now · ${deck.size} saved`
-        : 'Problems you miss will come back here for review.'
+    const dueCount = deck.due().length
+    $('label[for="mode-review"]').textContent = dueCount ? `Review (${dueCount})` : 'Review'
+    $('#review-summary').textContent = !deck.size
+        ? 'Problems you miss in Problems mode are saved here for review.'
+        : `${deck.size} saved · ${dueCount ? `${dueCount} due now` : `next due ${relativeTime(deck.nextDue())}`}`
     $('#clear-reviews').hidden = !deck.size
+}
+
+function reviewEmptyPrompt() {
+    const dueCount = deck.due().length
+    if (dueCount) { return `${dueCount} review${dueCount === 1 ? ' is' : 's are'} due. Press Next to start.` }
+    if (deck.size) { return `All caught up! The next review is due ${relativeTime(deck.nextDue())}.` }
+    return 'No saved reviews yet. Problems you miss in Problems mode come back here.'
 }
 
 function renderMoveInfo(entry) {
@@ -1074,15 +1101,17 @@ function bindControls() {
     }
     $('#show-answer').addEventListener('click', revealAnswer)
     $('#next-problem').addEventListener('click', () => newProblem())
-    $('#review-problems').addEventListener('click', () => newProblem({ review: true }))
     $('#clear-reviews').addEventListener('click', () => {
         if (deck.size && confirm(`Remove all ${deck.size} saved review problems? This can't be undone.`)) {
             deck.clear()
-            renderReviewStatus()
+            render()
         }
     })
     // Reviews become due over time, so keep the counts fresh
-    setInterval(() => { if (settings.mode === 'problems') { renderReviewStatus() } }, 30 * 1000)
+    setInterval(() => {
+        renderReviewStatus()
+        if (settings.mode !== 'explore') { renderProblemBar() }
+    }, 30 * 1000)
 
     for (const input of document.querySelectorAll('[data-setting]')) {
         const key = input.dataset.setting
@@ -1101,7 +1130,6 @@ function bindControls() {
             ArrowRight: redo,
             h: () => $('[data-setting="showMoves"]').click(),
             n: () => { if (settings.mode !== 'explore') { newProblem() } },
-            r: () => { if (settings.mode !== 'explore') { newProblem({ review: true }) } },
         }
         const action = actions[e.key]
         if (action) {
