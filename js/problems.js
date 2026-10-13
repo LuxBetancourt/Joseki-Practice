@@ -37,6 +37,9 @@ function answerTypes(node, color) {
     return new Map(node.children.filter((child) => child.color === color).map((child) => [child.move, child.type]))
 }
 
+/** A starting point or saved problem that doesn't match Josekipedia (any more). */
+export class StaleProblemError extends Error {}
+
 const pick = (items, random) => items[Math.floor(random() * items.length)]
 const shuffle = (items, random) => items
     .map((item) => ({ item, key: random() }))
@@ -49,7 +52,7 @@ async function replay(moves, getNode) {
     let position = new Position()
     for (const coord of moves) {
         const child = node.children.find((c) => c.move === coord && c.color === position.toPlay)
-        if (!child) { throw new Error(`Starting point isn't in Josekipedia (at ${coord})`) }
+        if (!child) { throw new StaleProblemError(`Position isn't in Josekipedia (at ${coord})`) }
         position = position.playSgf(coord, child.color)
         node = await getNode(child.id)
     }
@@ -241,4 +244,39 @@ export async function generatePickPath({ startMoves, color, firstTen, getNode, r
 
     if (options.length < PATH_OPTIONS) { return null }
     return { moves: chosen.moves, line: main.moves, options: shuffle(options, random) }
+}
+
+/** The kind-specific part of a problem as plain data, so it can be saved for review. */
+export function problemData(kind, problem) {
+    switch (kind) {
+        case 'punish': return { mistake: problem.mistake }
+        case 'shape': return { answer: problem.answer, line: problem.line }
+        case 'path': return { line: problem.line, options: problem.options.map(({ line, mistake }) => ({ line, mistake })) }
+        default: return {}
+    }
+}
+
+/**
+ * Rebuilds a saved problem ({ kind, moves, color, data }) in the same shape the generators
+ * return. Throws if Josekipedia no longer has the position.
+ */
+export async function rebuildProblem({ kind, moves, color, data }, { getNode, random = Math.random }) {
+    const { node, position } = await replay(moves, getNode)
+    const answers = answerTypes(node, color)
+    switch (kind) {
+        case 'punish':
+            return { moves, answers, mistake: data.mistake }
+        case 'shape': {
+            const target = playLine(position, data.line)
+            if (!target) { throw new StaleProblemError('Saved shape problem no longer fits the position') }
+            return { moves, answers, answer: data.answer, line: data.line, target }
+        }
+        case 'path': {
+            const options = data.options.map(({ line, mistake }) => ({ line, mistake, position: playLine(position, line) }))
+            if (options.some((option) => !option.position)) { throw new StaleProblemError('Saved path problem no longer fits the position') }
+            return { moves, line: data.line, options: shuffle(options, random) }
+        }
+        default:
+            return { moves, answers }
+    }
 }

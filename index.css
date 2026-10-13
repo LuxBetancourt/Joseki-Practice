@@ -468,3 +468,9 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
 /* The ring marking where a sequence goes wrong only shows once it's been explained */
 #path-choices .path-card:not(.wrong) .ring.bad { display: none; }
 .goban .ring.bad { stroke: var(--bad); }
+
+/* --- Reviews ---------------------------------------------------------------- */
+
+#review-summary { margin: 0; color: var(--muted); font-size: .85rem; }
+#clear-reviews { font-size: .8rem; color: var(--muted); }
+#clear-reviews[hidden] { display: none; }

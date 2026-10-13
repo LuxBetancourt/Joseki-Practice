@@ -1,6 +1,7 @@
 import { Position, IllegalMoveError, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath } from './problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError } from './problems.js'
+import { ReviewDeck } from './reviews.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath } from './text.js'
@@ -79,6 +80,8 @@ let generation = 0
 //                         the final position it reaches
 //   line, options, wrong: for path problems, the joseki line, the sequences shown (see
 //                         generatePickPath) and the indexes of options already picked wrongly
+//   spec:      the problem as plain data, saved to the review deck if the player misses it
+//   reviewKey: set when the problem is a review from the deck
 let problem = null
 const stats = { // This session's score per mode
     next: { solved: 0, attempted: 0 },
@@ -89,6 +92,19 @@ const stats = { // This session's score per mode
 const GENERATORS = { next: generateNextMove, punish: generatePunish, shape: generateFinalShape, path: generatePickPath }
 const PROBLEM_TYPE_NAMES = { next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path' }
 const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => settings.problemTypes[kind])
+
+// Problems the player missed come back for review (see reviews.js). Next mixes due reviews in;
+// the Review button serves only due reviews.
+const deck = new ReviewDeck()
+const REVIEW_MIX = 1 / 3 // Chance that Next serves a due review instead of a new problem
+const startPath = () => (settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start)
+const dueReviews = () => deck.due({ kinds: enabledProblemTypes(), color: humanColor(), startMoves: splitPath(startPath()) })
+
+/** Updates the review deck with how the player did on their first attempt at the problem. */
+function recordFirstAttempt(correct) {
+    if (!correct) { deck.recordMiss(problem.spec) }
+    else if (problem.reviewKey) { deck.recordSuccess(problem.reviewKey) }
+}
 let statusNote = '' // Shown in the status line while busy, when set
 const problemPending = () => problem && !problem.solved && !problem.revealed
 
@@ -168,6 +184,7 @@ function gradeAnswer(coord) {
     if (++problem.attempts === 1) { ++score.attempted }
 
     const correct = type === MoveType.IDEAL || (type === MoveType.GOOD && problem.kind === 'next')
+    if (problem.attempts === 1) { recordFirstAttempt(correct) }
     if (correct) {
         problem.solved = true
         if (problem.attempts === 1) { ++score.solved }
@@ -208,6 +225,7 @@ async function gradeShapeAnswer(coord) {
         catch { /* Couldn't check for a transposition; treat it as a different shape */ }
         if (gen !== generation) { return }
     }
+    if (problem.attempts === 1) { recordFirstAttempt(Boolean(rest)) }
 
     if (rest) {
         problem.solved = true
@@ -260,7 +278,10 @@ function takeBackWrongAnswer() {
 function revealAnswer() {
     if (!problemPending()) { return }
     problem.revealed = true
-    if (problem.attempts === 0) { ++stats[problem.kind].attempted }
+    if (problem.attempts === 0) {
+        ++stats[problem.kind].attempted
+        recordFirstAttempt(false)
+    }
     goTo(problem.index)
     render()
 }
@@ -278,7 +299,16 @@ const problemPrompt = () => {
         : `${them}’s ${where} is a mistake. Punish it!`
 }
 
-async function newProblem() {
+/**
+ * Loads a problem: a due review (always for the Review button, sometimes for Next) or a new one.
+ * @param {{ review?: boolean }} options
+ */
+async function newProblem({ review = false } = {}) {
+    const due = dueReviews()
+    if (review && !due.length) {
+        toast('No reviews are due right now.')
+        return
+    }
     const gen = ++generation
     problem = null
     freePlay = false
@@ -286,14 +316,31 @@ async function newProblem() {
     clearToasts()
     setBusy(true)
 
-    const start = settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start
-    const options = { startMoves: splitPath(start), color: humanColor(), firstTen: settings.firstTen, getNode }
+    const options = { startMoves: splitPath(startPath()), color: humanColor(), firstTen: settings.firstTen, getNode }
     try {
-        // Pick a random enabled type for each attempt. Random lines often end early in tenuki,
-        // so try a few times (and other types) before giving up.
-        const kinds = enabledProblemTypes()
         let found = null
         let kind = null
+        let reviewKey = null
+
+        // Reviews: rebuild the most overdue one that still fits Josekipedia
+        const reviewing = review || (due.length && Math.random() < REVIEW_MIX) ? due : []
+        for (const item of reviewing) {
+            try {
+                found = await rebuildProblem(item, { getNode })
+                kind = item.kind
+                reviewKey = item.key
+                break
+            }
+            catch (error) {
+                if (!(error instanceof StaleProblemError)) { throw error } // e.g. offline: keep the review
+                deck.remove(item.key) // Josekipedia changed and the problem no longer exists
+            }
+        }
+        if (gen !== generation) { return }
+
+        // New problems: pick a random enabled type for each attempt. Random lines often end early
+        // in tenuki, so try a few times (and other types) before giving up.
+        const kinds = enabledProblemTypes()
         for (let attempt = 0; attempt < 5 && !found && gen === generation; ++attempt) {
             kind = kinds[Math.floor(Math.random() * kinds.length)]
             found = await GENERATORS[kind](options)
@@ -301,11 +348,15 @@ async function newProblem() {
         if (gen !== generation) { return }
         if (!found) {
             setBusy(false)
-            toast('Couldn’t find a problem from this starting point.', 'warning', { label: 'Try Again', action: newProblem })
+            toast('Couldn’t find a problem from this starting point.', 'warning', { label: 'Try Again', action: () => newProblem() })
             return
         }
         setupPosition(found.moves)
-        problem = { ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [] }
+        problem = {
+            ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [],
+            spec: { kind, moves: found.moves, color: humanColor(), data: problemData(kind, found) },
+            reviewKey,
+        }
         ++generation
         advance()
     }
@@ -313,7 +364,7 @@ async function newProblem() {
         if (gen !== generation) { return }
         console.error(error)
         setBusy(false)
-        toast('Couldn’t load data from Josekipedia.', 'error', { label: 'Retry', action: newProblem })
+        toast('Couldn’t load data from Josekipedia.', 'error', { label: 'Retry', action: () => newProblem({ review }) })
     }
 }
 
@@ -626,6 +677,7 @@ function gradePath(i) {
     const score = stats.path
     if (++problem.attempts === 1) { ++score.attempted }
     const option = problem.options[i]
+    if (problem.attempts === 1) { recordFirstAttempt(!option.mistake) }
     if (!option.mistake) {
         problem.solved = true
         if (problem.attempts === 1) { ++score.solved }
@@ -732,7 +784,7 @@ function renderProblemBar() {
     $('#problem-bar').hidden = !inProblemMode
     if (!inProblemMode) { return }
 
-    $('#problem-kind').textContent = problem ? PROBLEM_TYPE_NAMES[problem.kind] : ''
+    $('#problem-kind').textContent = problem ? PROBLEM_TYPE_NAMES[problem.kind] + (problem.reviewKey ? ' · Review' : '') : ''
     $('#problem-kind').hidden = !problem
 
     let prompt = ''
@@ -744,6 +796,7 @@ function renderProblemBar() {
     else if (!problem && !busy) { prompt = 'No problem loaded. Try again, or choose another starting point.' }
     $('#problem-prompt').textContent = prompt
     $('#show-answer').disabled = !problemPending() || busy
+    renderReviewStatus()
     const kinds = Object.keys(stats)
     const solved = kinds.reduce((sum, kind) => sum + stats[kind].solved, 0)
     const attempted = kinds.reduce((sum, kind) => sum + stats[kind].attempted, 0)
@@ -752,6 +805,17 @@ function renderProblemBar() {
         .filter((kind) => stats[kind].attempted)
         .map((kind) => `${PROBLEM_TYPE_NAMES[kind]}: ${stats[kind].solved} / ${stats[kind].attempted}`)
         .join('\n')
+}
+
+function renderReviewStatus() {
+    const dueCount = dueReviews().length
+    const button = $('#review-problems')
+    button.textContent = dueCount ? `Review (${dueCount})` : 'Review'
+    button.disabled = !dueCount || busy
+    $('#review-summary').textContent = deck.size
+        ? `${dueCount} due now · ${deck.size} saved`
+        : 'Problems you miss will come back here for review.'
+    $('#clear-reviews').hidden = !deck.size
 }
 
 function renderMoveInfo(entry) {
@@ -1005,10 +1069,20 @@ function bindControls() {
                 toast('Keep at least one problem type selected.', 'warning')
             }
             saveSettings()
+            renderReviewStatus() // Due reviews depend on the enabled types
         })
     }
     $('#show-answer').addEventListener('click', revealAnswer)
-    $('#next-problem').addEventListener('click', newProblem)
+    $('#next-problem').addEventListener('click', () => newProblem())
+    $('#review-problems').addEventListener('click', () => newProblem({ review: true }))
+    $('#clear-reviews').addEventListener('click', () => {
+        if (deck.size && confirm(`Remove all ${deck.size} saved review problems? This can't be undone.`)) {
+            deck.clear()
+            renderReviewStatus()
+        }
+    })
+    // Reviews become due over time, so keep the counts fresh
+    setInterval(() => { if (settings.mode === 'problems') { renderReviewStatus() } }, 30 * 1000)
 
     for (const input of document.querySelectorAll('[data-setting]')) {
         const key = input.dataset.setting
@@ -1027,6 +1101,7 @@ function bindControls() {
             ArrowRight: redo,
             h: () => $('[data-setting="showMoves"]').click(),
             n: () => { if (settings.mode !== 'explore') { newProblem() } },
+            r: () => { if (settings.mode !== 'explore') { newProblem({ review: true }) } },
         }
         const action = actions[e.key]
         if (action) {

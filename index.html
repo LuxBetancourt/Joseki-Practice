@@ -31,6 +31,7 @@
             <span id="problem-prompt"></span>
             <span id="score"></span>
             <button type="button" id="show-answer">Show Answer</button>
+            <button type="button" id="review-problems" title="Problems you missed that are due again (R)">Review</button>
             <button type="button" id="next-problem" class="primary" title="New problem (N)">Next</button>
         </div>
         <div id="board-wrap">
@@ -74,6 +75,9 @@
             <li title="Faded stones show the shape a joseki ends in; find the move that starts it."><label><input type="checkbox" data-problem-type="shape"> Final Shape</label></li>
             <li title="Several sequences are shown; only one is joseki. Spot it."><label><input type="checkbox" data-problem-type="path"> Pick the Path</label></li>
         </ul>
+        <h2 class="problems-only">Review</h2>
+        <p class="problems-only note" id="review-summary"></p>
+        <button type="button" class="problems-only link" id="clear-reviews" hidden>Clear saved reviews</button>
         <h2 class="explore-only">Computer Plays</h2>
         <ul class="plain explore-only">
             <li><label><input type="checkbox" data-setting="ideal"> <span class="swatch ideal"></span>Ideal moves</label></li>

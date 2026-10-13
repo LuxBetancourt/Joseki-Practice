@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -169,4 +169,45 @@ test('pick the path: skips lines too short to be interesting', async () => {
     const tree = pathTree({ 45: [] }) // main line is just qd
     const problem = await generatePickPath({ startMoves: START, color: BLACK, firstTen: true, getNode: treeGetter(tree), random: sequence([0.3]) })
     assert.equal(problem, null)
+})
+
+test('problems survive being saved as plain data and rebuilt', async () => {
+    const tree = pathTree({
+        // qg gives Final Shape a second joseki choice
+        44: [{ id: 45, move: 'qd', color: B, type: 0 }, { id: 92, move: 'rd', color: B, type: 2 }, { id: 95, move: 'qg', color: B, type: 0 }],
+        95: [],
+        92: [{ id: 93, move: 'qd', color: W, type: 0 }],
+        46: [{ id: 47, move: 'od', color: B, type: 0 }, { id: 94, move: 'oc', color: B, type: 4 }],
+        94: [],
+    })
+    const getNode = treeGetter(tree)
+    const options = { startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.1, 0.6, 0.3]) }
+
+    for (const [kind, generate] of [['next', generateNextMove], ['shape', generateFinalShape], ['path', generatePickPath]]) {
+        const original = await generate(options)
+        assert.ok(original, kind)
+        const saved = JSON.parse(JSON.stringify({ kind, moves: original.moves, color: BLACK, data: problemData(kind, original) }))
+        const rebuilt = await rebuildProblem(saved, { getNode, random: sequence([0.5]) })
+
+        assert.deepEqual(rebuilt.moves, original.moves, kind)
+        if (original.answers) { assert.deepEqual([...rebuilt.answers], [...original.answers], kind) }
+        if (kind === 'shape') {
+            assert.equal(rebuilt.answer, original.answer)
+            assert.ok(rebuilt.target.sameStones(original.target))
+        }
+        if (kind === 'path') {
+            assert.deepEqual(rebuilt.line, original.line)
+            assert.equal(rebuilt.options.length, original.options.length)
+            for (const option of original.options) {
+                const match = rebuilt.options.find((o) => o.position.sameStones(option.position))
+                assert.ok(match, 'every option comes back')
+                assert.deepEqual(match.mistake, option.mistake)
+            }
+        }
+    }
+})
+
+test('rebuilding fails clearly when the position is no longer in Josekipedia', async () => {
+    const saved = { kind: 'next', moves: ['pd', 'zz'], color: BLACK, data: {} }
+    await assert.rejects(rebuildProblem(saved, { getNode: treeGetter(pathTree()) }), StaleProblemError)
 })
