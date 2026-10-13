@@ -1,6 +1,6 @@
-import { test } from 'node:test'
+import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -20,6 +20,8 @@ const TREE = {
 }
 
 const getNode = async (id) => ({ id, labels: [], children: (TREE[id] || []).map((c) => ({ labels: [], ...c })) })
+beforeEach(() => clearSpares()) // Spare problems from one test mustn't leak into the next
+
 const sequence = (values) => { let i = 0; return () => values[i++ % values.length] }
 
 test('next move: stops on a position where the player is to move, with answers', async () => {
@@ -310,4 +312,33 @@ test('tenuki-able: finds a position with the chosen answer', async () => {
     assert.deepEqual(no, { moves: START, answer: 'no', color: BLACK })
     const yes = await generateTenuki({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.1]) })
     assert.deepEqual(yes, { moves: [...START, 'qd', 'pc'], answer: 'yes', color: BLACK })
+})
+
+test("who's better: positions with other verdicts are kept and used later", async () => {
+    const tree = pathTree({
+        44: [{ id: 45, move: 'qd', color: B, type: 0, labels: [45] }, { id: 92, move: 'rd', color: B, type: 2, labels: [1] }],
+        92: [],
+    })
+    const getNode = async (id) => ({ id, labels: [], children: (tree[id] || []).map((c) => ({ labels: [], ...c })) })
+    const options = { startMoves: START, color: BLACK, firstTen: true, getNode }
+    // Wanting "white" finds rd, and stashes the "even" qd it passed
+    const white = await generateWhosBetter({ ...options, random: sequence([0.4]) })
+    assert.equal(white.answer, 'white')
+    // Break the tree so a walk finds nothing: "even" now comes from the stash, once
+    const empty = { ...options, getNode: async (id) => ({ id, labels: [], children: id === 44 ? [] : (tree[id] || []).map((c) => ({ labels: [], ...c })) }) }
+    const even = await generateWhosBetter({ ...empty, random: sequence([0.9]) })
+    assert.deepEqual(even, { moves: [...START, 'qd'], answer: 'even', labels: [45] })
+    assert.equal(await generateWhosBetter({ ...empty, random: sequence([0.9]) }), null, 'each spare is used once')
+})
+
+test('spare problems only come from the current starting point', async () => {
+    const tree = pathTree({
+        44: [{ id: 45, move: 'qd', color: B, type: 0, labels: [45] }, { id: 92, move: 'rd', color: B, type: 2, labels: [1] }],
+        92: [],
+    })
+    const getNode = async (id) => ({ id, labels: [], children: (tree[id] || []).map((c) => ({ labels: [], ...c })) })
+    await generateWhosBetter({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.4]) }) // stashes "even" under pd qf nc qc
+    // From a different starting point (3-4), with nothing to find, the stashed "even" doesn't qualify
+    const other = async (id) => ({ id, labels: [], children: id === 1 ? [{ id: 39, move: 'qd', color: B, type: 0, labels: [] }] : [] })
+    assert.equal(await generateWhosBetter({ startMoves: ['qd'], color: BLACK, firstTen: true, getNode: other, random: sequence([0.9]) }), null)
 })

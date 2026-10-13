@@ -296,6 +296,35 @@ export async function rebuildProblem({ kind, moves, color, data }, { getNode, ra
 
 const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki']
 
+// --- Spare problems -----------------------------------------------------------------
+// Who's Better? and Tenuki-able? choose their answer first, so a walk often passes positions that
+// fit other answers. Rather than throw those away, they're kept (in memory, for this visit) and
+// used when a later walk can't find the answer it wants. Each is used at most once.
+
+const MAX_SPARES = 40 // Per kind and answer
+const spares = new Map() // "kind:answer" -> [problem]
+
+function stashSpare(kind, problem) {
+    const key = `${kind}:${problem.answer}`
+    const list = spares.get(key) || []
+    if (list.some((p) => p.moves.join('') === problem.moves.join(''))) { return }
+    list.push(problem)
+    if (list.length > MAX_SPARES) { list.shift() }
+    spares.set(key, list)
+}
+
+/** A stashed problem with this answer from the given starting point, removed from the stash. */
+function takeSpare(kind, answer, startMoves) {
+    const list = spares.get(`${kind}:${answer}`) || []
+    const index = list.findIndex((p) => startMoves.every((move, i) => p.moves[i] === move))
+    return index === -1 ? null : list.splice(index, 1)[0]
+}
+
+/** Forgets every stashed problem (for tests). */
+export function clearSpares() {
+    spares.clear()
+}
+
 // --- Who's Better? -----------------------------------------------------------------
 
 // Josekipedia's verdict labels: good / slightly good for one side, the other side collapsing, even
@@ -314,20 +343,27 @@ export function outcomeOf(labels) {
  * "even"; returns null if this walk doesn't find one.
  * Returns { moves, answer, labels } or null.
  */
-export async function generateWhosBetter({ startMoves, color, firstTen, getNode, random = Math.random }) {
-    const want = pick(OUTCOMES, random)
-    const found = []
+export async function generateWhosBetter(options) {
+    const want = pick(OUTCOMES, options.random || Math.random)
+    // A scarce answer gets a second walk, so failing doesn't tilt problems toward the common one
+    return await findWhosBetter(want, options) || await findWhosBetter(want, options)
+}
+
+async function findWhosBetter(want, { startMoves, firstTen, getNode, random = Math.random }) {
+    const found = [] // Positions with any verdict: the wanted ones are used, the rest stashed
     await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
         // The verdicts are on the moves from here, which the node already lists
         for (const child of state.node.children) {
-            if (child.move === PASS || state.moves.length + 1 < MIN_MOVES || outcomeOf(child.labels) !== want) { continue }
-            if (isLegal(state.position, child)) { found.push({ state, child }) }
+            const answer = outcomeOf(child.labels)
+            if (!answer || child.move === PASS || state.moves.length + 1 < MIN_MOVES || !isLegal(state.position, child)) { continue }
+            found.push({ moves: [...state.moves, child.move], answer, labels: child.labels })
         }
-        return found.length > 0
+        return found.some((problem) => problem.answer === want)
     })
-    if (!found.length) { return null }
-    const { state, child } = pick(found, random)
-    return { moves: [...state.moves, child.move], answer: want, labels: child.labels }
+    const wanted = found.filter((problem) => problem.answer === want)
+    const chosen = wanted.length ? pick(wanted, random) : takeSpare('better', want, startMoves)
+    found.filter((problem) => problem !== chosen).forEach((problem) => stashSpare('better', problem))
+    return chosen
 }
 
 // --- Tenuki-able? -------------------------------------------------------------------
@@ -350,9 +386,9 @@ export function tenukiVerdict(node, color) {
 
 const SETTLED_LABEL = 23
 const MAX_INFERRED_CHECKED = 4
-// "No" is found on almost every walk (inferred, if not recorded) but "yes" on under half, so aim
-// for "yes" more often to make the problems players actually see come out about even
-const AIM_FOR_YES = 0.68
+// How often to look for "yes" rather than "no", tuned by simulation so the problems players
+// actually see come out about even (with the second walk and the stash, "yes" is the easier find)
+const AIM_FOR_YES = 0.4
 
 /**
  * The joseki move that would make a position an inferred "no" for `color`, or null. Josekipedia
@@ -374,25 +410,29 @@ function inferredNoMove(node, color) {
  * Returns { moves, answer, color, inferredFrom? } (the side asked about, and for an inferred "no"
  * the local move the joseki continues with) or null.
  */
-export async function generateTenuki({ startMoves, firstTen, getNode, random = Math.random }) {
-    const want = random() < AIM_FOR_YES ? 'yes' : 'no'
-    const recorded = []
+export async function generateTenuki(options) {
+    const want = (options.random || Math.random)() < AIM_FOR_YES ? 'yes' : 'no'
+    // A scarce answer gets a second walk, so failing doesn't tilt problems toward the common one
+    return await findTenuki(want, options) || await findTenuki(want, options)
+}
+
+async function findTenuki(want, { startMoves, firstTen, getNode, random = Math.random }) {
+    const recorded = [] // Positions with recorded evidence either way: the wanted ones are used, the rest stashed
     const inferred = []
     await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
         if (state.moves.length < MIN_MOVES) { return false }
         const color = state.position.toPlay
-        if (tenukiVerdict(state.node, color) === want) {
-            recorded.push(state)
-            return true
-        }
-        const move = want === 'no' && inferredNoMove(state.node, color)
+        const answer = tenukiVerdict(state.node, color)
+        if (answer) { recorded.push({ moves: state.moves, answer, color }) }
+        if (answer === want) { return true }
+        const move = want === 'no' && !answer && inferredNoMove(state.node, color)
         if (move) { inferred.push({ state, move }) }
         return false
     })
-    if (recorded.length) {
-        const chosen = pick(recorded, random)
-        return { moves: chosen.moves, answer: want, color: chosen.position.toPlay }
-    }
+    const wanted = recorded.filter((problem) => problem.answer === want)
+    const chosen = wanted.length ? pick(wanted, random) : null
+    recorded.filter((problem) => problem !== chosen).forEach((problem) => stashSpare('tenuki', problem))
+    if (chosen) { return chosen }
 
     // An inferred "no" needs the sequence to carry on after the local move: the other side has a
     // joseki reply, so the exchange isn't finished
@@ -404,7 +444,7 @@ export async function generateTenuki({ startMoves, firstTen, getNode, random = M
             return { moves: state.moves, answer: 'no', color: state.position.toPlay, inferredFrom: move.move }
         }
     }
-    return null
+    return takeSpare('tenuki', want, startMoves)
 }
 
 /** A saved problem ({ kind, moves, color, data }) as a compact, URL-safe string, for sharing. */
