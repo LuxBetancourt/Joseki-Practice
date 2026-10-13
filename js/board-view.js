@@ -6,6 +6,19 @@ const NS = 'http://www.w3.org/2000/svg'
 const STAR_POINTS = [3, 9, 15].flatMap((x) => [3, 9, 15].map((y) => [x, y]))
 const MARGIN = 1.6
 
+/** SVG for a traditional point marker ('triangle' | 'square' | 'circle') centered on (x, y). */
+function markShape(shape, x, y, className) {
+    if (shape === 'triangle') {
+        const r = 0.34
+        const points = [[x, y - r], [x + r * 0.866, y + r / 2], [x - r * 0.866, y + r / 2]]
+        return `<polygon class="${className}" points="${points.map((p) => p.join(',')).join(' ')}"/>`
+    }
+    if (shape === 'square') {
+        return `<rect class="${className}" x="${x - 0.22}" y="${y - 0.22}" width="0.44" height="0.44"/>`
+    }
+    return `<circle class="${className}" cx="${x}" cy="${y}" r="0.25"/>`
+}
+
 function el(name, attrs = {}, parent) {
     const node = document.createElementNS(NS, name)
     for (const [key, value] of Object.entries(attrs)) { node.setAttribute(key, value) }
@@ -116,7 +129,7 @@ export class BoardView {
      *   position:   Position to draw
      *   lastMove:   {x, y} | null
      *   highlights: [{x, y, type}] candidate moves; type is a CSS class suffix
-     *   marks:      [{x, y}] points referenced from the move comment
+     *   marks:      [{x, y, shape}] marked points; shape is 'triangle', 'square' or 'circle'
      */
     render(state) {
         Object.assign(this.state, state)
@@ -131,7 +144,8 @@ export class BoardView {
                 }
             }
         }
-        if (lastMove && position.at(lastMove.x, lastMove.y) !== EMPTY) {
+        const marked = (x, y) => marks.some((m) => m.x === x && m.y === y)
+        if (lastMove && position.at(lastMove.x, lastMove.y) !== EMPTY && !marked(lastMove.x, lastMove.y)) {
             const on = position.at(lastMove.x, lastMove.y) === BLACK ? 'on-black' : 'on-white'
             stones.push(`<circle class="last-move ${on}" cx="${lastMove.x}" cy="${lastMove.y}" r="0.2"/>`)
         }
@@ -142,9 +156,10 @@ export class BoardView {
             .map(({ x, y, type }) => `<circle class="highlight ${type}" cx="${x}" cy="${y}" r="0.28"/>`)
             .join('')
 
-        this.markLayer.innerHTML = marks
-            .map(({ x, y }) => `<circle class="mark" cx="${x}" cy="${y}" r="0.42"/>`)
-            .join('')
+        this.markLayer.innerHTML = marks.map(({ x, y, shape }) => {
+            const on = { [EMPTY]: 'on-empty', [BLACK]: 'on-black' }[position.at(x, y)] || 'on-white'
+            return markShape(shape, x, y, `mark ${on}`)
+        }).join('')
 
         this.updateGhost()
     }

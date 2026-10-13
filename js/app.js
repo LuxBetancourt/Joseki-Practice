@@ -382,13 +382,16 @@ function setupPosition(moves) {
 const capitalize = (s) => s[0].toUpperCase() + s.slice(1)
 
 // Points marked on the board from the move comment (pinned by clicking) or while hovering a
-// reference. Pins belong to the position they were made in.
-const marks = { entry: null, pinned: new Set(), hover: null }
+// reference. Pins belong to the position they were made in. Each coordinate in the comment gets
+// a traditional marker shape, in order of first mention.
+const MARK_SHAPES = ['triangle', 'square', 'circle']
+const SHAPE_SYMBOLS = { triangle: '△', square: '□', circle: '○' }
+const marks = { entry: null, pinned: new Set(), hover: null, shapes: new Map() }
 
 function currentMarks() {
     const coords = new Set(marks.pinned)
     if (marks.hover) { coords.add(marks.hover) }
-    return [...coords].map(fromSgf)
+    return [...coords].map((coord) => ({ ...fromSgf(coord), shape: marks.shapes.get(coord) || 'circle' }))
 }
 
 function setHoverMark(coord) {
@@ -414,6 +417,7 @@ function render() {
         marks.entry = entry
         marks.pinned.clear()
         marks.hover = null
+        marks.shapes.clear()
     }
 
     const toHighlight = (move, type) => ({ ...fromSgf(move), type: MOVE_TYPE_NAMES[type] || 'unknown' })
@@ -603,6 +607,10 @@ function renderMoveInfo(entry) {
         comment.textContent = entry.move ? 'No comment for this move.' : 'Play a move, or choose a starting point.'
         return
     }
+    marks.shapes.clear()
+    for (const { coord } of segments.filter((segment) => segment.type === 'coord')) {
+        if (!marks.shapes.has(coord)) { marks.shapes.set(coord, MARK_SHAPES[marks.shapes.size % MARK_SHAPES.length]) }
+    }
     for (const segment of segments) {
         comment.append(renderSegment(segment))
     }
@@ -627,7 +635,11 @@ function renderSegment(segment) {
             button.type = 'button'
             button.className = 'coord-ref'
             button.dataset.coord = segment.coord
-            button.textContent = segment.label
+            const symbol = document.createElement('span')
+            symbol.className = 'shape-symbol'
+            symbol.setAttribute('aria-hidden', 'true')
+            symbol.textContent = SHAPE_SYMBOLS[marks.shapes.get(segment.coord)]
+            button.append(symbol, segment.label)
             button.title = 'Mark on the board'
             const pinned = marks.pinned.has(segment.coord)
             button.classList.toggle('pinned', pinned)

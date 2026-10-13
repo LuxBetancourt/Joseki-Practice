@@ -229,11 +229,10 @@ kbd {
 .goban .highlight.trick { fill: var(--trick); }
 .goban .highlight.question { fill: var(--question); }
 .goban .highlight.unknown { fill: var(--unknown); }
-.goban .mark {
-    fill: none;
-    stroke: #0097b2;
-    stroke-width: .11;
-}
+.goban .mark { fill: none; stroke-width: .09; stroke-linejoin: round; }
+.goban .mark.on-empty { stroke: var(--wood-line); stroke-width: .12; }
+.goban .mark.on-black { stroke: #fff; }
+.goban .mark.on-white { stroke: #000; }
 .goban :is(.highlights, .stones, .marks) { pointer-events: none; }
 
 /* --- Toasts ---------------------------------------------------------------- */
@@ -402,3 +401,4 @@ body:not([data-mode="practice"]) .practice-only { display: none; }
 .goban .ring { fill: none; stroke-width: .16; }
 .goban .ring.ideal { stroke: var(--ideal); }
 .goban .ring.good { stroke: var(--good); }
+.coord-ref .shape-symbol { font-size: .85em; margin-right: .1em; }
