@@ -5,3 +5,8 @@ compatibility_date = "2026-01-01"
 
 [vars]
 ALLOWED_ORIGIN = "https://josekipractice.neocities.org"
+
+# Shared cache of Josekipedia nodes across all Cloudflare locations (see cloudflare-worker.js)
+[[kv_namespaces]]
+binding = "NODES"
+id = "43659723d419412caebf499ead5c1ab4"
