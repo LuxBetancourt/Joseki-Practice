@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS = {
     onlyPassIfJoseki: false,
     showMoves: false,
     showMoveInfo: true,
-    showResults: false,
+    showFollowUps: false,
     start: 'empty',
 }
 
@@ -411,13 +411,13 @@ function render() {
 
     renderProblemBar()
     renderMoveInfo(entry)
-    renderResults(entry)
+    renderFollowUps(entry)
 }
 
-// --- Results of each candidate move ------------------------------------------
+// --- Follow-up variations ----------------------------------------------------
 
 const lineCache = new Map() // child node id -> Promise<main line result>
-let resultsKey = null
+let followUpsKey = null
 
 /** The main line after playing `child` from `position`, cached by node. */
 function lineAfter(child, position) {
@@ -430,16 +430,16 @@ function lineAfter(child, position) {
     return lineCache.get(child.id)
 }
 
-function renderResults(entry) {
-    const show = settings.showResults && !freePlay && Boolean(entry.node?.children) && !problemPending()
-    $('#results').hidden = !show
+function renderFollowUps(entry) {
+    const show = settings.showFollowUps && !freePlay && Boolean(entry.node?.children) && !problemPending()
+    $('#follow-ups').hidden = !show
     if (!show) {
-        resultsKey = null
+        followUpsKey = null
         return
     }
     const key = `${entry.node.id}:${current}:${settings.firstTen}`
-    if (key === resultsKey) { return }
-    resultsKey = key
+    if (key === followUpsKey) { return }
+    followUpsKey = key
 
     const { position } = entry
     let candidates = entry.node.children.filter((child) => child.color === position.toPlay)
@@ -449,20 +449,20 @@ function renderResults(entry) {
         return (child.type === MoveType.IDEAL || child.type === MoveType.GOOD) && point && position.isLegal(point.x, point.y, child.color)
     }).slice(0, 6)
 
-    const container = $('#result-cards')
+    const container = $('#follow-up-cards')
     container.replaceChildren()
     if (!candidates.length) {
         container.textContent = 'No joseki continuations from here.'
         return
     }
     for (const child of candidates) {
-        container.append(resultCard(child, position, key))
+        container.append(followUpCard(child, position, key))
     }
 }
 
-function resultCard(child, position, key) {
+function followUpCard(child, position, key) {
     const card = document.createElement('figure')
-    card.className = 'result-card'
+    card.className = 'follow-up-card'
     const slot = document.createElement('div')
     slot.className = 'shape-slot'
     slot.textContent = 'Loading…'
@@ -473,7 +473,7 @@ function resultCard(child, position, key) {
     badge.className = `badge ${MOVE_TYPE_NAMES[child.type]}`
     badge.textContent = MOVE_TYPE_NAMES[child.type]
     const labels = document.createElement('ul')
-    labels.className = 'result-labels'
+    labels.className = 'follow-up-labels'
     caption.append(name, ' ', badge, labels)
     card.append(slot, caption)
 
@@ -482,12 +482,13 @@ function resultCard(child, position, key) {
     card.addEventListener('mouseleave', () => view.render({ marks: [] }))
 
     lineAfter(child, position).then((line) => {
-        if (resultsKey !== key) { return }
+        if (followUpsKey !== key) { return }
         // Number the candidate 1 and the main line after it; later moves on a point win
         const played = [child, ...line.moves].map(({ move }, i) => ({ ...fromSgf(move), n: i + 1 }))
         const numbers = new Map(played.map(({ x, y, n }) => [`${x},${y}`, n]))
         const region = shapeRegion(line.position, localShape(line.position, played))
-        slot.replaceWith(renderShape(line.position, { region, numbers, label: `Result of ${sgfToDisplay(child.move)}` }))
+        const rings = [{ ...point, type: MOVE_TYPE_NAMES[child.type] }]
+        slot.replaceWith(renderShape(line.position, { region, numbers, rings, label: `Follow-up variation after ${sgfToDisplay(child.move)}` }))
 
         const texts = line.node.labels.map(labelText).filter(Boolean)
         labels.replaceChildren(...texts.map((text) => {
@@ -497,7 +498,7 @@ function resultCard(child, position, key) {
         }))
         card.title = `${line.moves.length + 1} moves`
     }).catch(() => {
-        if (resultsKey === key) { slot.textContent = 'Couldn’t load.' }
+        if (followUpsKey === key) { slot.textContent = 'Couldn’t load.' }
     })
     return card
 }

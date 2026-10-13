@@ -74,8 +74,9 @@ export function shapeRegion(position, points = allStones(position)) {
 /**
  * Renders `position` cropped to `region` (default: shapeRegion(position)).
  * `numbers` maps "x,y" to a label drawn on that stone (e.g. move order).
+ * `rings` are [{x, y, type}] points to circle; `type` is a CSS class for the ring's color.
  */
-export function renderShape(position, { region = shapeRegion(position), numbers = new Map(), label = '' } = {}) {
+export function renderShape(position, { region = shapeRegion(position), numbers = new Map(), rings = [], label = '' } = {}) {
     const { x0, y0, x1, y1 } = region
     const left = x0 - OVERHANG
     const top = y0 - OVERHANG
@@ -109,6 +110,10 @@ export function renderShape(position, { region = shapeRegion(position), numbers 
                 parts.push(`<text class="move-number on-${name}" x="${x}" y="${y}">${number}</text>`)
             }
         }
+    }
+
+    for (const { x, y, type } of rings) {
+        parts.push(`<circle class="ring ${type}" cx="${x}" cy="${y}" r="0.54"/>`)
     }
 
     const svg = document.createElementNS(NS, 'svg')
