@@ -446,7 +446,7 @@ async function advance({ feedback = false } = {}) {
             playMove(move.move, { byHuman: false })
         }
         else if (!entry.node.children.some((child) => child.color === entry.position.toPlay)) {
-            toast('That’s the end of this joseki.')
+            showEndOfJoseki()
         }
     }
     catch (error) {
@@ -481,7 +481,7 @@ function chooseComputerMove(entry) {
     const color = position.toPlay
     const ownMoves = node.children.filter((child) => child.color === color)
     if (!ownMoves.length) {
-        toast('That’s the end of this joseki.')
+        showEndOfJoseki()
         return null
     }
 
@@ -612,6 +612,10 @@ function render() {
     const entry = currentEntry()
     const { position } = entry
     const lastMove = entry.move && fromSgf(entry.move.coord)
+    if (endNotice && endNotice.entry !== entry) {
+        endNotice.element.remove()
+        endNotice = null
+    }
     if (marks.entry !== entry) {
         marks.entry = entry
         marks.pinned.clear()
@@ -1023,7 +1027,11 @@ function renderSegment(segment) {
 
 // --- Toasts --------------------------------------------------------------------
 
-function toast(message, kind = 'info', action) {
+/**
+ * Shows a message over the board. It fades after a few seconds, unless it has an action button
+ * or is `sticky` (the caller removes it). Returns the message element.
+ */
+function toast(message, kind = 'info', action, { sticky = false } = {}) {
     const container = $('#toasts')
     const item = document.createElement('div')
     item.className = `toast ${kind}`
@@ -1040,12 +1048,22 @@ function toast(message, kind = 'info', action) {
     }
     container.prepend(item)
     while (container.children.length > 3) { container.lastChild.remove() }
-    if (!action) {
+    if (!action && !sticky) {
         setTimeout(() => {
             item.classList.add('leaving')
             setTimeout(() => item.remove(), 400)
         }, 2600)
     }
+    return item
+}
+
+// "End of this joseki" stays up until the player moves away from that position, so it isn't
+// mistaken for a position with more to play
+let endNotice = null // { entry, element }
+
+function showEndOfJoseki() {
+    endNotice?.element.remove()
+    endNotice = { entry: currentEntry(), element: toast('That’s the end of this joseki.', 'info', null, { sticky: true }) }
 }
 
 function clearToasts() {

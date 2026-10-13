@@ -543,3 +543,12 @@ body[data-mode="review"] .not-review { display: none; }
     clip: rect(0 0 0 0);
     white-space: nowrap;
 }
+
+/* Small boards: at this size a scaled stroke is under a pixel wide and renders unevenly (some
+   lines darker, lighter or dotted), so draw the grid as a hairline of whole device pixels
+   (--grid-line, set by shape-view.js), snapped to pixels. */
+.goban.shape .grid {
+    stroke-width: var(--grid-line, 1px);
+    vector-effect: non-scaling-stroke;
+    shape-rendering: crispEdges;
+}

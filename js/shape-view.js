@@ -8,6 +8,24 @@ const EDGE_SNAP = 5 // Show the edge if the shape comes within this many lines o
 const MIN_SPAN = 7
 const OVERHANG = 0.6 // How far cut-off lines extend past the region
 
+/**
+ * Small boards draw their grid with a fixed hairline, which must be a whole number of device
+ * pixels to look even (at 150% scaling, "1px" is 1.5 device pixels and lines alternate between
+ * 1 and 2). Sets --grid-line to the nearest whole number of device pixels, and keeps it updated
+ * if the ratio changes (zooming, moving to another screen).
+ */
+let trackingPixelRatio = false
+function trackPixelRatio() {
+    if (trackingPixelRatio) { return }
+    trackingPixelRatio = true
+    const update = () => {
+        const ratio = window.devicePixelRatio || 1
+        document.documentElement.style.setProperty('--grid-line', `${Math.max(1, Math.round(ratio)) / ratio}px`)
+        matchMedia(`(resolution: ${ratio}dppx)`).addEventListener('change', update, { once: true })
+    }
+    update()
+}
+
 /** Grows the inclusive range [lo, hi] to `span` points, preferring to grow away from a board edge. */
 function grow(lo, hi, span) {
     while (hi - lo + 1 < span) {
@@ -77,6 +95,7 @@ export function shapeRegion(position, points = allStones(position)) {
  * `rings` are [{x, y, type}] points to circle; `type` is a CSS class for the ring's color.
  */
 export function renderShape(position, { region = shapeRegion(position), numbers = new Map(), rings = [], label = '' } = {}) {
+    trackPixelRatio()
     const { x0, y0, x1, y1 } = region
     const left = x0 - OVERHANG
     const top = y0 - OVERHANG
