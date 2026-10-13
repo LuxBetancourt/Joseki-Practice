@@ -441,12 +441,13 @@ async function newProblem() {
 }
 
 /** Puts a generated or rebuilt problem on the board. */
-function presentProblem(found, kind, { reviewKey = null, color = humanColor() } = {}) {
+function presentProblem(found, kind, { reviewKey = null, color = humanColor(), link } = {}) {
     setupPosition(found.moves)
     problem = {
         ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [], step: 0, missed: false, hint: false,
         spec: { kind, moves: found.moves, color, data: problemData(kind, found) },
         reviewKey,
+        link, // Opened from a link: keep it, as rebuilding can reorder Pick the Path's sequences
     }
     ++generation
     advance()
@@ -1319,9 +1320,9 @@ function begin() {
 }
 
 // --- Shareable links -------------------------------------------------------------
-// In Explore mode the URL's hash holds the moves to the current position (#path=pdqfnc), so the
-// address can be bookmarked or shared. Problem modes leave it out, as it could give answers away,
-// but Copy link gives a link to the current problem (#problem=..., see encodeProblem).
+// The URL's hash always leads back to what's on screen, so the address can be bookmarked or
+// shared and reloading keeps it: in Explore mode the moves to the current position
+// (#path=pdqfnc), in the problem modes the current problem (#problem=..., see encodeProblem).
 
 const PATH_HASH = /^#path=((?:[a-t]{2})+)$/
 const PROBLEM_HASH = /^#problem=([A-Za-z0-9_-]+)$/
@@ -1330,15 +1331,18 @@ function updateUrl(entry) {
     const explore = settings.mode === 'explore'
     $('#copy-link').disabled = explore ? !entry.path : !problem
     $('#copy-link').title = explore ? 'Copy a link to this position' : 'Copy a link to this problem'
-    const hash = settings.mode === 'explore' && entry.path ? `#path=${entry.path}` : ''
+    const hash = explore
+        ? (entry.path ? `#path=${entry.path}` : '')
+        : (problem ? `#problem=${problemLink()}` : '')
     if (location.hash !== hash) { // window.history: `history` here is the game's move list
         window.history.replaceState(null, '', hash || location.pathname + location.search)
     }
 }
 
+const problemLink = () => (problem.link ??= encodeProblem(problem.spec))
 const shareUrl = () => `${location.origin}${location.pathname}${settings.mode === 'explore'
     ? `#path=${currentEntry().path}`
-    : `#problem=${encodeProblem(problem.spec)}`}`
+    : `#problem=${problemLink()}`}`
 
 async function copyLink() {
     const url = shareUrl()
@@ -1354,7 +1358,8 @@ async function copyLink() {
 
 /**
  * If the URL holds a shared problem, opens it in Problems mode, played as the color it was made
- * for (whatever problem types are turned on). Returns true if it did.
+ * for (whatever problem types are turned on). A reload in Review mode stays a review. Returns true
+ * if it opened one.
  */
 function openSharedProblem() {
     const match = PROBLEM_HASH.exec(location.hash)
@@ -1367,17 +1372,18 @@ function openSharedProblem() {
     }
 
     const previousPlayer = settings.player
-    settings.mode = 'problems'
+    const review = settings.mode === 'review' && deck.find(reviewKey(spec)) ? reviewKey(spec) : null
+    settings.mode = review ? 'review' : 'problems'
     settings.player = colorName(spec.color)
     saveSettings()
-    document.querySelectorAll('input[name="mode"]').forEach((input) => { input.checked = input.value === 'problems' })
+    document.querySelectorAll('input[name="mode"]').forEach((input) => { input.checked = input.value === settings.mode })
     document.querySelectorAll('input[name="player"]').forEach((input) => { input.checked = input.value === settings.player })
     applyMode()
-    loadSharedProblem(spec, previousPlayer)
+    loadSharedProblem(spec, match[1], previousPlayer, review)
     return true
 }
 
-async function loadSharedProblem(spec, previousPlayer) {
+async function loadSharedProblem(spec, link, previousPlayer, reviewKey) {
     const gen = ++generation
     problem = null
     freePlay = false
@@ -1387,9 +1393,9 @@ async function loadSharedProblem(spec, previousPlayer) {
     try {
         const found = await rebuildProblem(spec, { getNode })
         if (gen !== generation) { return }
-        presentProblem(found, spec.kind, { color: spec.color })
-        const color = settings.player !== previousPlayer ? ` You’re playing ${capitalize(settings.player)}.` : ''
-        toast(`Opened a shared ${PROBLEM_TYPE_NAMES[spec.kind]} problem.${color}`)
+        presentProblem(found, spec.kind, { color: spec.color, reviewKey, link })
+        // Reloading the page lands here too, so only speak up if the player's color changed
+        if (settings.player !== previousPlayer) { toast(`You’re playing ${capitalize(settings.player)}, the color this problem is for.`) }
     }
     catch (error) {
         if (gen !== generation) { return }
@@ -1427,7 +1433,7 @@ function openSharedPosition() {
 window.addEventListener('hashchange', () => {
     // Our own updates use replaceState, which doesn't fire this; it's a pasted or edited link
     if (PATH_HASH.test(location.hash) && location.hash.slice(6) !== currentEntry()?.path) { openSharedPosition() }
-    else if (PROBLEM_HASH.test(location.hash)) { openSharedProblem() }
+    else if (PROBLEM_HASH.test(location.hash) && location.hash.slice(9) !== problem?.link) { openSharedProblem() }
 })
 
 buildStartingPoints()
