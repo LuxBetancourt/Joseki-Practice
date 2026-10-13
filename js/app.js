@@ -702,10 +702,12 @@ function render() {
         highlights = [toHighlight(problem.line[problem.step].move, MoveType.IDEAL)]
     }
     else if (problem?.revealed && current === problem.index) {
-        if (['path', 'better', 'tenuki'].includes(problem.kind)) {
+        if (problem.inferredFrom) {
+            highlights = [toHighlight(problem.inferredFrom, MoveType.IDEAL)] // The local move the joseki continues with
+        }
+        else if (['path', 'better', 'tenuki'].includes(problem.kind)) {
             highlights = [] // The answer is marked among the choices instead
         }
-        if (problem.inferredFrom) { highlights = [toHighlight(problem.inferredFrom, MoveType.IDEAL)] }
         else {
             const hasIdeal = [...problem.answers.values()].includes(MoveType.IDEAL)
             const accepted = problem.kind === 'next' || !hasIdeal ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
