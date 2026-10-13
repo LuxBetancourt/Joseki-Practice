@@ -53,9 +53,17 @@ test('punish: opponent mistake with a recorded ideal answer', async () => {
     assert.equal(problem.answers.get('qc'), 0)
 })
 
-test('punish: skips mistakes that have no ideal answer', async () => {
-    // As white, the only mistake (black rd at node 42) has no ideal white reply, so there is no problem.
+test('punish: a good answer counts as the punishment when there is no ideal one', async () => {
+    // As white, the only mistake (black rd at node 42) has just a good white reply (qc)
     const problem = await generatePunish({ startMoves: ['pd', 'qf'], color: WHITE, firstTen: true, getNode, random: sequence([0.1]) })
+    assert.deepEqual(problem.moves, ['pd', 'qf', 'rd'])
+    assert.equal(problem.answers.get('qc'), 1)
+})
+
+test('punish: skips mistakes with no ideal or good answer', async () => {
+    const tree = { ...TREE, 60: [{ id: 61, move: 'qc', color: W, type: 2 }] } // only a bad reply
+    const getTreeNode = async (id) => ({ id, labels: [], children: (tree[id] || []).map((c) => ({ labels: [], ...c })) })
+    const problem = await generatePunish({ startMoves: ['pd', 'qf'], color: WHITE, firstTen: true, getNode: getTreeNode, random: sequence([0.1]) })
     assert.equal(problem, null)
 })
 

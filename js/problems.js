@@ -8,8 +8,10 @@ import { mainLine } from './lines.js'
 
 const MAX_TARGET_DEPTH = 12
 const MAX_DEPTH = 30
-const MAX_MISTAKES_CHECKED = 6
-const MAX_SHAPE_CANDIDATES = 3
+// How many candidates the generators check before giving up on a walk. Most lookups along the
+// walk are already cached, so trying several is cheap and makes failures much rarer.
+const MAX_MISTAKES_CHECKED = 10
+const MAX_LINES_CHECKED = 6
 const MAX_SHAPE_LINE = 10 // Longer targets are too much to picture at once
 const PATH_OPTIONS = 3
 const MIN_PATH_LINE = 3
@@ -73,7 +75,8 @@ async function step(state, child, getNode) {
  * the line ends.
  */
 async function walk(state, { firstTen, getNode, random }, visit) {
-    const targetDepth = MIN_MOVES + Math.floor(random() * (MAX_TARGET_DEPTH - MIN_MOVES + 1))
+    // Counted from the starting point, so deep starting points still get walked into
+    const targetDepth = Math.max(MIN_MOVES, state.moves.length + 1) + Math.floor(random() * (MAX_TARGET_DEPTH - MIN_MOVES + 1))
     for (let depth = 0; depth < MAX_DEPTH; ++depth) {
         const suitable = visit(state)
         if (suitable && state.moves.length >= targetDepth) { return }
@@ -123,7 +126,8 @@ export async function generatePunish({ startMoves, color, firstTen, getNode, ran
     for (const { state, mistake } of ordered.slice(0, MAX_MISTAKES_CHECKED)) {
         const after = await step(state, mistake, getNode)
         const answers = answerTypes(after.node, color)
-        if ([...answers.values()].includes(MoveType.IDEAL)) {
+        // The punishment is the ideal answer, or failing that a good one
+        if ([...answers.values()].some((type) => type === MoveType.IDEAL || type === MoveType.GOOD)) {
             return { moves: after.moves, answers, mistake: { move: mistake.move, type: mistake.type } }
         }
     }
@@ -138,21 +142,25 @@ export async function generatePunish({ startMoves, color, firstTen, getNode, ran
  * Returns { moves, answers, answer, line: [{ move, color }], target: Position } or null.
  */
 export async function generateFinalShape({ startMoves, color, firstTen, getNode, random = Math.random }) {
-    let chosen = null
+    const candidates = []
     await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
         const suitable = state.position.toPlay === color && state.moves.length >= MIN_MOVES
             && josekiMoves(state.node, state.position, firstTen).length >= 2
-        if (suitable) { chosen = state }
+        if (suitable) { candidates.push(state) }
         return suitable
     })
-    if (!chosen) { return null }
 
-    for (const child of shuffle(josekiMoves(chosen.node, chosen.position, firstTen), random).slice(0, MAX_SHAPE_CANDIDATES)) {
-        const after = await step(chosen, child, getNode)
-        const rest = await mainLine({ node: after.node, position: after.position, getNode })
-        const line = [{ move: child.move, color: child.color }, ...rest.moves]
-        if (line.length <= MAX_SHAPE_LINE && line.filter((m) => m.color === color).length >= 2) {
-            return { moves: chosen.moves, answers: answerTypes(chosen.node, color), answer: child.move, line, target: rest.position }
+    // Deepest position first; at each, the player's joseki moves in random order
+    let checked = 0
+    for (const state of candidates.reverse()) {
+        for (const child of shuffle(josekiMoves(state.node, state.position, firstTen), random)) {
+            if (++checked > MAX_LINES_CHECKED) { return null }
+            const after = await step(state, child, getNode)
+            const rest = await mainLine({ node: after.node, position: after.position, getNode })
+            const line = [{ move: child.move, color: child.color }, ...rest.moves]
+            if (line.length <= MAX_SHAPE_LINE && line.filter((m) => m.color === color).length >= 2) {
+                return { moves: state.moves, answers: answerTypes(state.node, color), answer: child.move, line, target: rest.position }
+            }
         }
     }
     return null
@@ -185,19 +193,19 @@ export async function generatePickPath({ startMoves, color, firstTen, getNode, r
         return suitable
     })
 
-    // Deepest first, find a position whose main line is a sensible length
-    let chosen = null
-    let main = null
-    for (const state of candidates.reverse().slice(0, MAX_SHAPE_CANDIDATES)) {
-        const line = await mainLine({ node: state.node, position: state.position, getNode })
-        if (line.moves.length >= MIN_PATH_LINE && line.moves.length <= MAX_PATH_LINE) {
-            chosen = state
-            main = line
-            break
-        }
+    // Deepest first, find a position whose main line is a sensible length and that has enough
+    // wrong sequences to go with it
+    for (const state of candidates.reverse().slice(0, MAX_LINES_CHECKED)) {
+        const main = await mainLine({ node: state.node, position: state.position, getNode })
+        if (main.moves.length < MIN_PATH_LINE || main.moves.length > MAX_PATH_LINE) { continue }
+        const options = await pathOptions(state, main, { getNode, random })
+        if (options) { return { moves: state.moves, line: main.moves, options } }
     }
-    if (!chosen) { return null }
+    return null
+}
 
+/** The joseki line plus PATH_OPTIONS - 1 sequences branching off it, shuffled; or null. */
+async function pathOptions(chosen, main, { getNode, random }) {
     const options = [{ line: main.moves, position: main.position }]
     const addOption = (line, mistake) => {
         const position = playLine(chosen.position, line)
@@ -242,8 +250,7 @@ export async function generatePickPath({ startMoves, color, firstTen, getNode, r
         addOption([...main.moves.slice(0, step), { move, color: stoneColor }], { step, move, color: stoneColor, type: known ? known.type : null })
     }
 
-    if (options.length < PATH_OPTIONS) { return null }
-    return { moves: chosen.moves, line: main.moves, options: shuffle(options, random) }
+    return options.length < PATH_OPTIONS ? null : shuffle(options, random)
 }
 
 /** The kind-specific part of a problem as plain data, so it can be saved for review. */

@@ -192,7 +192,9 @@ function gradeAnswer(coord) {
     const score = stats[problem.kind]
     if (++problem.attempts === 1) { ++score.attempted }
 
-    const correct = type === MoveType.IDEAL || (type === MoveType.GOOD && problem.kind === 'next')
+    // Punish wants the strongest answer: the ideal one, or a good one when there's no ideal answer
+    const hasIdeal = [...problem.answers.values()].includes(MoveType.IDEAL)
+    const correct = type === MoveType.IDEAL || (type === MoveType.GOOD && (problem.kind === 'next' || !hasIdeal))
     if (problem.attempts === 1) { recordFirstAttempt(correct) }
     if (correct) {
         problem.solved = true
@@ -405,17 +407,24 @@ async function newProblem() {
         }
         if (gen !== generation) { return }
 
-        // New problems: pick a random enabled type for each attempt. Random lines often end early
-        // in tenuki, so try a few times (and other types) before giving up.
+        // New problems: random lines often end early in tenuki, so try several times, going
+        // round the enabled types (from a random one) so each gets its turn before giving up
         const kinds = enabledProblemTypes()
-        for (let attempt = 0; attempt < 5 && !found && gen === generation; ++attempt) {
-            kind = kinds[Math.floor(Math.random() * kinds.length)]
+        const first = Math.floor(Math.random() * kinds.length)
+        for (let attempt = 0; attempt < 8 && !found && gen === generation; ++attempt) {
+            kind = kinds[(first + attempt) % kinds.length]
             found = await GENERATORS[kind](options)
         }
         if (gen !== generation) { return }
         if (!found) {
+            // Show the starting point rather than leaving the last problem on the board
+            setupPosition(options.startMoves)
             setBusy(false)
-            toast('Couldn’t find a problem from this starting point.', 'warning', { label: 'Try Again', action: () => newProblem() })
+            // Some types are scarce from some starting points (e.g. few recorded mistakes after a fuseki)
+            const names = kinds.map((k) => PROBLEM_TYPE_NAMES[k])
+            const which = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : names[0]
+            const suggestion = kinds.length < Object.keys(GENERATORS).length ? ' Turning on more problem types may help.' : ''
+            toast(`Couldn’t find a ${which} problem from this starting point.${suggestion}`, 'warning', { label: 'Try Again', action: () => newProblem() })
             return
         }
         setupPosition(found.moves)
@@ -648,7 +657,8 @@ function render() {
             highlights = [] // The correct sequence is marked among the choices instead
         }
         else {
-            const accepted = problem.kind === 'next' ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
+            const hasIdeal = [...problem.answers.values()].includes(MoveType.IDEAL)
+            const accepted = problem.kind === 'next' || !hasIdeal ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
             highlights = [...problem.answers].filter(([, type]) => accepted.includes(type)).map(([move, type]) => toHighlight(move, type))
         }
     }
