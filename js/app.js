@@ -1278,6 +1278,8 @@ function toast(message, kind = 'info', action, { sticky = false } = {}) {
 let endNotice = null // { entry, element }
 
 function showEndOfJoseki() {
+    // Who's Better? positions are often the end of a line, and saying so isn't news there
+    if (problem?.kind === 'better' && current === problem.index) { return }
     endNotice?.element.remove()
     endNotice = { entry: currentEntry(), element: toast('That’s the end of this joseki.', 'info', null, { sticky: true }) }
 }
