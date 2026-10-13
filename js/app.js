@@ -1470,7 +1470,7 @@ function begin() {
 // (#path=pdqfnc), in the problem modes the current problem (#problem=..., see encodeProblem).
 
 const PATH_HASH = /^#path=((?:[a-t]{2})+)$/
-const PROBLEM_HASH = /^#problem=([A-Za-z0-9_-]+)$/
+const PROBLEM_HASH = /^#problem=([A-Za-z0-9_.-]+)$/
 
 function updateUrl(entry) {
     const explore = settings.mode === 'explore'

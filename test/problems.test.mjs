@@ -194,9 +194,11 @@ test('problems survive being saved as plain data and rebuilt', async () => {
     const options = { startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.1, 0.6, 0.3]) }
 
     for (const [kind, generate] of [['next', generateNextMove], ['shape', generateFinalShape], ['path', generatePickPath]]) {
-        const original = await generate(options)
-        assert.ok(original, kind)
-        const saved = JSON.parse(JSON.stringify({ kind, moves: original.moves, color: BLACK, data: problemData(kind, original) }))
+      const original = await generate({ ...options, random: sequence([0.1, 0.6, 0.3]) })
+      assert.ok(original, kind)
+      const spec = { kind, moves: original.moves, color: BLACK, data: problemData(kind, original) }
+      // Saved reviews keep the data; links keep only what Josekipedia can't fill back in
+      for (const saved of [JSON.parse(JSON.stringify(spec)), decodeProblem(encodeProblem(spec))]) {
         const rebuilt = await rebuildProblem(saved, { getNode, random: sequence([0.5]) })
 
         assert.deepEqual(rebuilt.moves, original.moves, kind)
@@ -214,6 +216,7 @@ test('problems survive being saved as plain data and rebuilt', async () => {
                 assert.deepEqual(match.mistake, option.mistake)
             }
         }
+      }
     }
 })
 
@@ -232,9 +235,10 @@ test('problem links round-trip, including Pick the Path data', async () => {
     const spec = { kind: 'path', moves: found.moves, color: BLACK, data: problemData('path', found) }
 
     const text = encodeProblem(spec)
-    assert.match(text, /^[A-Za-z0-9_-]+$/, 'safe to put in a URL')
+    assert.match(text, /^[A-Za-z0-9_.-]+$/, 'safe to put in a URL')
+    assert.ok(text.length < 40, text)
     const decoded = decodeProblem(text)
-    assert.deepEqual(decoded, JSON.parse(JSON.stringify(spec)))
+    assert.deepEqual(decoded.moves, spec.moves)
 
     const rebuilt = await rebuildProblem(decoded, { getNode })
     assert.equal(rebuilt.options.length, found.options.length)
@@ -341,4 +345,24 @@ test('spare problems only come from the current starting point', async () => {
     // From a different starting point (3-4), with nothing to find, the stashed "even" doesn't qualify
     const other = async (id) => ({ id, labels: [], children: id === 1 ? [{ id: 39, move: 'qd', color: B, type: 0, labels: [] }] : [] })
     assert.equal(await generateWhosBetter({ startMoves: ['qd'], color: BLACK, firstTen: true, getNode: other, random: sequence([0.9]) }), null)
+})
+
+test('short problem links for every kind, and older JSON links still open', async () => {
+    const moves = ['pd', 'qf', 'nc']
+    for (const [spec, text] of [
+        [{ kind: 'next', moves, color: BLACK, data: {} }, 'nbpdqfnc'],
+        [{ kind: 'punish', moves, color: WHITE, data: { mistake: { move: 'nc', type: 2 } } }, 'pwpdqfnc'],
+        [{ kind: 'shape', moves, color: BLACK, data: { answer: 'qc', line: [] } }, 'sbpdqfnc.qc'],
+        [{ kind: 'better', moves, color: BLACK, data: { answer: 'even', labels: [45] } }, 'bbpdqfnc'],
+        [{ kind: 'tenuki', moves, color: WHITE, data: { answer: 'no', inferredFrom: 'qc' } }, 'twpdqfnc.qc'],
+        [{ kind: 'tenuki', moves, color: WHITE, data: { answer: 'yes' } }, 'twpdqfnc'],
+    ]) {
+        assert.equal(encodeProblem(spec), text)
+        assert.deepEqual(decodeProblem(text).moves, moves)
+    }
+    const legacy = btoa(JSON.stringify({ k: 'next', m: 'pdqfnc', c: BLACK, d: {} })).replace(/=+$/, '')
+    assert.deepEqual(decodeProblem(legacy), { kind: 'next', moves, color: BLACK, data: {} })
+    for (const bad of ['sbpdqfnc', 'sbpdqfnc.qc.qd', 'lbpdqfnc', 'lbpdqfnc.x', 'nbpdqfnc.qc', 'nbpdq']) {
+        assert.throws(() => decodeProblem(bad), undefined, bad)
+    }
 })

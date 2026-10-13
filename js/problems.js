@@ -268,30 +268,69 @@ export function problemData(kind, problem) {
 /**
  * Rebuilds a saved problem ({ kind, moves, color, data }) in the same shape the generators
  * return. Throws if Josekipedia no longer has the position.
+ * Saved reviews keep all of problemData; links keep only what can't be worked out again from
+ * Josekipedia (see compactData), and the rest is filled in here.
  */
 export async function rebuildProblem({ kind, moves, color, data }, { getNode, random = Math.random }) {
     const { node, position } = await replay(moves, getNode)
     const answers = answerTypes(node, color)
+    const stale = (what) => { throw new StaleProblemError(`Saved ${what} problem no longer fits the position`) }
     switch (kind) {
-        case 'punish':
-            return { moves, answers, mistake: data.mistake }
+        case 'punish': {
+            // The mistake is the last move
+            const before = await replay(moves.slice(0, -1), getNode)
+            const last = before.node.children.find((child) => child.move === moves.at(-1) && child.color === before.position.toPlay)
+            return { moves, answers, mistake: data.mistake || { move: last.move, type: last.type } }
+        }
         case 'shape': {
-            const target = playLine(position, data.line)
-            if (!target) { throw new StaleProblemError('Saved shape problem no longer fits the position') }
-            return { moves, answers, answer: data.answer, line: data.line, target }
+            let line = data.line
+            if (!line) {
+                const child = node.children.find((c) => c.move === data.answer && c.color === color) || stale('shape')
+                const rest = await mainLine({ node: await getNode(child.id), position: position.playSgf(child.move, child.color), getNode })
+                line = [{ move: child.move, color: child.color }, ...rest.moves]
+            }
+            const target = playLine(position, line) || stale('shape')
+            return { moves, answers, answer: data.answer, line, target }
         }
         case 'path': {
-            const options = data.options.map(({ line, mistake }) => ({ line, mistake, position: playLine(position, line) }))
-            if (options.some((option) => !option.position)) { throw new StaleProblemError('Saved path problem no longer fits the position') }
-            return { moves, line: data.line, options: shuffle(options, random) }
+            const saved = data.options || await pathFromPicks({ node, position }, data.picks, getNode)
+            const options = saved.map(({ line, mistake }) => ({ line, mistake, position: playLine(position, line) }))
+            if (options.some((option) => !option.position)) { stale('path') }
+            return { moves, line: data.line || options.find((option) => !option.mistake).line, options: shuffle(options, random) }
         }
-        case 'better':
-            return { moves, answers, answer: data.answer, labels: data.labels }
-        case 'tenuki':
-            return { moves, answers, answer: data.answer, inferredFrom: data.inferredFrom }
+        case 'better': {
+            const labels = data.labels || node.labels
+            return { moves, answers, answer: data.answer || outcomeOf(labels) || stale("who's better"), labels }
+        }
+        case 'tenuki': {
+            const answer = data.answer || (data.inferredFrom ? 'no' : tenukiVerdict(node, color)) || stale('tenuki')
+            return { moves, answers, answer, inferredFrom: data.inferredFrom }
+        }
         default:
             return { moves, answers }
     }
+}
+
+/**
+ * Pick the Path's options from the joseki line and where the others branch off it, as
+ * pathOptions makes them: a recorded mistake continues as Josekipedia does, a made-up one stops.
+ */
+async function pathFromPicks(start, picks, getNode) {
+    const main = await mainLine({ ...start, getNode })
+    const options = [{ line: main.moves }]
+    for (const { step, move, stops } of picks) {
+        const state = main.states[step]
+        if (!state) { throw new StaleProblemError('Saved path problem no longer fits the position') }
+        const color = state.position.toPlay
+        const known = state.node.children.find((child) => child.move === move && child.color === color)
+        let line = [...main.moves.slice(0, step), { move, color }]
+        if (!stops && known) {
+            const rest = await mainLine({ node: await getNode(known.id), position: state.position.playSgf(move, color), getNode })
+            line = [...line, ...rest.moves].slice(0, main.moves.length + 2)
+        }
+        options.push({ line, mistake: { step, move, color, type: known ? known.type : null } })
+    }
+    return options
 }
 
 const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki']
@@ -447,14 +486,56 @@ async function findTenuki(want, { startMoves, firstTen, getNode, random = Math.r
     return takeSpare('tenuki', want, startMoves)
 }
 
-/** A saved problem ({ kind, moves, color, data }) as a compact, URL-safe string, for sharing. */
+// Problem links: a letter for the kind, one for the color, the moves, then anything that can't be
+// worked out again from Josekipedia, each after a dot. For example "sbpdqfncqcpc.qe" is a Final
+// Shape problem for Black after pd qf nc qc pc, whose answer is qe.
+const KIND_CODES = { next: 'n', punish: 'p', shape: 's', path: 'l', better: 'b', tenuki: 't' }
+const MOVE = '[a-t]{2}'
+
+/** A saved problem ({ kind, moves, color, data }) as a short, URL-safe string, for sharing. */
 export function encodeProblem({ kind, moves, color, data }) {
-    const json = JSON.stringify({ k: kind, m: moves.join(''), c: color, d: data })
-    return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    return [`${KIND_CODES[kind]}${color === BLACK ? 'b' : 'w'}${moves.join('')}`, ...compactData(kind, data)].join('.')
 }
 
-/** The reverse of encodeProblem. Throws if the text isn't a problem link. */
+/** The parts of problemData a link needs; rebuildProblem works out the rest. */
+function compactData(kind, data) {
+    switch (kind) {
+        case 'shape': return [data.answer]
+        // Where each wrong sequence leaves the joseki: "3qd", or "3qd-" if it stops there
+        case 'path': return data.options.filter((option) => option.mistake).map(({ line, mistake: { step, move } }) =>
+            `${step}${move}${line.length === step + 1 ? '-' : ''}`)
+        case 'tenuki': return data.inferredFrom ? [data.inferredFrom] : []
+        default: return []
+    }
+}
+
+/** The reverse of encodeProblem (and of the older, longer JSON links). Throws if the text isn't a problem link. */
 export function decodeProblem(text) {
+    const match = new RegExp(`^([npslbt])([bw])((?:${MOVE})*)((?:\\.[0-9a-t-]+)*)$`).exec(text)
+    if (!match) { return decodeLegacyProblem(text) }
+    const [, code, colorCode, moves, rest] = match
+    const kind = KINDS.find((k) => KIND_CODES[k] === code)
+    const extras = rest.split('.').slice(1)
+    const fail = () => { throw new Error('Not a problem link') }
+    const one = () => (extras.length === 1 && new RegExp(`^${MOVE}$`).test(extras[0]) ? extras[0] : fail())
+    let data = {}
+    if (kind === 'shape') { data = { answer: one() } }
+    else if (kind === 'tenuki' && extras.length) { data = { inferredFrom: one() } }
+    else if (kind === 'path') {
+        data = {
+            picks: extras.map((extra) => {
+                const pick = new RegExp(`^(\\d+)(${MOVE})(-?)$`).exec(extra) || fail()
+                return { step: Number(pick[1]), move: pick[2], stops: pick[3] === '-' }
+            }),
+        }
+        if (!data.picks.length) { fail() }
+    }
+    else if (extras.length) { fail() }
+    return { kind, moves: moves.match(/../g) || [], color: colorCode === 'b' ? BLACK : WHITE, data }
+}
+
+/** Links from before the short format: base64 JSON of the whole problem. */
+function decodeLegacyProblem(text) {
     const base64 = text.replace(/-/g, '+').replace(/_/g, '/')
     const { k, m, c, d } = JSON.parse(atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4)))
     if (!KINDS.includes(k) || typeof m !== 'string' || !/^(?:[a-t]{2})+$/.test(m)
