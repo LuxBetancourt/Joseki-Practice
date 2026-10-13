@@ -63,4 +63,3 @@
     color: var(--text);
 }
 .review-details { margin: 0 0 .4rem; color: var(--muted); font-size: .85rem; }
-.goban .ring.last { stroke: var(--mark); }

@@ -463,11 +463,26 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
     width: min(100%, calc(100vh - 9rem), 760px);
     min-width: 280px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)); /* Always three sequences */
     gap: .75rem;
     margin-top: .75rem;
 }
 #path-choices[hidden] { display: none; }
+/* The starting position sits above the three sequences, the same size as one of them */
+.path-start {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: calc((100% - 1.5rem) / 3);
+    min-width: 140px;
+    margin: 0;
+    padding: .4rem;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+}
+.path-start svg { display: block; width: 100%; aspect-ratio: 1; border-radius: 4px; }
+.path-start figcaption { margin-top: .35rem; font-size: .85rem; text-align: center; color: var(--muted); }
+.goban .ring.last { stroke: var(--mark); }
 .path-card {
     margin: 0;
     padding: .4rem;

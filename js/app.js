@@ -678,7 +678,8 @@ function renderPathChoices() {
 
     if (pathChoicesFor !== problem) {
         pathChoicesFor = problem
-        container.replaceChildren(...problem.options.map((option, i) => pathCard(option, i)))
+        const region = pathRegion()
+        container.replaceChildren(pathStartCard(region), ...problem.options.map((option, i) => pathCard(option, i, region)))
     }
 
     // Update the cards' state: wrong picks, and everything once answered
@@ -693,7 +694,27 @@ function renderPathChoices() {
     })
 }
 
-function pathCard(option, i) {
+/** One region for all of a path problem's cards, so they're easy to compare. */
+function pathRegion() {
+    const start = history[problem.index].position
+    const points = problem.options.flatMap(({ line, position }) => localShape(position, line.map(({ move }) => fromSgf(move))))
+    return shapeRegion(start, points)
+}
+
+/** The position the sequences start from, with the last move circled. */
+function pathStartCard(region) {
+    const entry = history[problem.index]
+    const lastMove = entry.move && fromSgf(entry.move.coord)
+    const card = document.createElement('figure')
+    card.className = 'path-start'
+    card.append(renderShape(entry.position, { region, rings: lastMove ? [{ ...lastMove, type: 'last' }] : [], label: 'Starting position' }))
+    const caption = document.createElement('figcaption')
+    caption.textContent = `Starting position · ${capitalize(colorName(entry.position.toPlay))} to play`
+    card.append(caption)
+    return card
+}
+
+function pathCard(option, i, region) {
     const card = document.createElement('figure')
     card.className = 'path-card'
     const button = document.createElement('button')
@@ -701,10 +722,6 @@ function pathCard(option, i) {
     button.setAttribute('aria-label', `Sequence ${'ABC'[i]}`)
     button.addEventListener('click', () => gradePath(i))
 
-    // All cards share one region so they're easy to compare
-    const start = history[problem.index].position
-    const points = problem.options.flatMap(({ line, position }) => localShape(position, line.map(({ move }) => fromSgf(move))))
-    const region = shapeRegion(start, points)
     const numbers = new Map(option.line.map(({ move }, n) => {
         const { x, y } = fromSgf(move)
         return [`${x},${y}`, n + 1]
