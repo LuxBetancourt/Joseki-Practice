@@ -885,7 +885,6 @@ function renderReviewStatus() {
     $('#review-summary').textContent = !deck.size
         ? 'Missed problems are saved here for review.'
         : `${deck.size} saved · ${dueCount ? `${dueCount} due now` : `next due ${relativeTime(deck.nextDue())}`}`
-    $('#manage-reviews').hidden = !deck.size
 }
 
 function reviewEmptyPrompt() {

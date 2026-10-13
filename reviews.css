@@ -1,11 +1,19 @@
 /* Saved Reviews page. Shares colors, buttons, panels and board styles with index.css. */
 
+/* Back button | title | equal empty space, so the title stays centered on the page */
 .reviews-header {
     width: min(960px, 100% - 2rem);
     margin: 0 auto;
     padding: 1rem 0;
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
     gap: 1rem;
+}
+.reviews-header .back-button { justify-self: start; }
+@media (max-width: 640px) {
+    .reviews-header { grid-template-columns: 1fr; justify-items: center; gap: .5rem; }
+    .reviews-header .back-button { justify-self: center; }
 }
 .back-button {
     display: inline-block;

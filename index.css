@@ -493,8 +493,18 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
 body:not([data-mode="review"]) .review-only { display: none; }
 body[data-mode="review"] .not-review { display: none; }
 #review-summary { margin: .6rem 0 0; color: var(--muted); font-size: .85rem; }
-#manage-reviews { display: inline-block; margin-top: .3rem; font-size: .85rem; }
-#manage-reviews[hidden] { display: none; }
+#manage-reviews {
+    display: block;
+    margin-top: .6rem;
+    padding: .4em .8em;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--button);
+    color: var(--text);
+    text-align: center;
+    text-decoration: none;
+}
+#manage-reviews:hover { background: var(--button-hover); }
 
 /* Notification dot on the Review mode button when problems are due */
 .segmented label.has-due { position: relative; }
