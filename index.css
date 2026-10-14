@@ -806,7 +806,8 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 
 #type-banner {
     position: absolute;
-    inset: 0;
+    left: 0;
+    right: 0; /* top and height: over the board, set by showTypeBanner */
     z-index: 30;
     display: flex;
     align-items: center;

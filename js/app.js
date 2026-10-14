@@ -944,8 +944,14 @@ function showTypeBanner(kind, review) {
     banner.querySelector('.type-banner-name').textContent = PROBLEM_TYPE_NAMES[kind]
     banner.querySelector('.type-banner-goal').textContent = review ? `Review · ${PROBLEM_TYPE_GOALS[kind]}` : PROBLEM_TYPE_GOALS[kind]
     banner.classList.remove('play')
-    void banner.offsetWidth // Restart the animation
-    banner.classList.add('play')
+    // Over the board (or Pick the Path's cards, which replace it), once this render has laid it out
+    requestAnimationFrame(() => {
+        const target = $('#board-wrap').hidden ? $('#path-choices') : $('#board-wrap')
+        banner.style.top = `${target.offsetTop}px`
+        banner.style.height = `${target.offsetHeight}px`
+        void banner.offsetWidth // Restart the animation
+        banner.classList.add('play')
+    })
 }
 
 // --- Ladders ---------------------------------------------------------------------
