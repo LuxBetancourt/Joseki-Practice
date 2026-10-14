@@ -1,6 +1,7 @@
 // Cleaning and parsing of Josekipedia comment text. Pure functions, no DOM.
 
 import { displayToSgf, sgfToDisplay } from './go.js'
+import { describeCitation } from './sources.js'
 
 // Windows-1252 code points for bytes 0x80-0x9F (bytes undefined in cp1252 map to themselves).
 const CP1252_HIGH = [
@@ -68,7 +69,7 @@ export function splitPath(path) {
 export function parseComment(raw) {
     const text = cleanText(raw)
     const segments = []
-    const pattern = /\[path:([a-t]+)\]|\[([a-hj-t]\d{1,2})\]|(https?:\/\/[^\s<>"\])]+)/gi
+    const pattern = /\[path:([a-t]+)\]|\[([a-hj-t]\d{1,2})\]|(https?:\/\/[^\s<>"\])]+)|\[src:([\w\s,.]+)\]/gi
     let last = 0
     let match
 
@@ -81,6 +82,12 @@ export function parseComment(raw) {
         if (match[1]) {
             const moves = splitPath(match[1].toLowerCase())
             segments.push({ type: 'path', path: moves.join(''), label: moves.map(sgfToDisplay).join(' ') })
+        }
+        else if (match[4]) {
+            // A book cited inline: shown by its title (see sources.js)
+            const source = describeCitation(match[4])
+            if (source) { segments.push({ type: 'source', ...source }) }
+            else { pushText(match[0]) }
         }
         else if (match[2]) {
             const coord = displayToSgf(match[2])

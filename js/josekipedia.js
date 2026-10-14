@@ -39,6 +39,7 @@ function normalize(raw) {
         type: typeof raw._mtype === 'number' ? raw._mtype : null,
         labels: Array.isArray(raw._labels) ? raw._labels : [],
         comment: raw.C || '',
+        sources: Array.isArray(raw._sources) ? raw._sources : [], // See sources.js
     }
     if (Array.isArray(raw._children)) {
         node.children = raw._children.map(normalize)

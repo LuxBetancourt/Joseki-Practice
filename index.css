@@ -776,3 +776,10 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 @media (max-width: 640px) { #ladder-note { min-width: 0; } }
 
 #show-answer[hidden], #explore-problem[hidden] { display: none; }
+
+/* Move info: the books and professionals Josekipedia cites */
+#move-sources[hidden] { display: none; }
+#move-sources { margin-top: .8rem; padding-top: .6rem; border-top: 1px solid var(--border); }
+#move-sources h3 { margin: 0 0 .3rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+#move-sources ul { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
+#move-comment cite { font-style: italic; }

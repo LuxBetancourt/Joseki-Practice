@@ -9,6 +9,7 @@ import { orderKinds, addRecentKind, seenKey, addSeen } from './problem-mix.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
 import { parseComment, splitPath, cleanText } from './text.js'
+import { describeSource } from './sources.js'
 import { BoardView, markShape } from './board-view.js'
 import { JOSEKI, FUSEKI, CLASSIC_OPENINGS } from './starting-points.js'
 import { JOSEKIPEDIA_URL } from './config.js'
@@ -1334,6 +1335,7 @@ function renderMoveInfo(entry) {
     const comment = $('#move-comment')
     meta.replaceChildren()
     comment.replaceChildren()
+    $('#move-sources').hidden = true
 
     const node = entry.node
     if (freePlay) {
@@ -1368,6 +1370,7 @@ function renderMoveInfo(entry) {
         meta.append(tag)
     }
 
+    renderSources(node.sources)
     const segments = parseComment(node.comment)
     if (!segments.length) {
         comment.textContent = entry.move ? 'No comment for this move.' : 'Play a move, or choose a starting point.'
@@ -1380,6 +1383,30 @@ function renderMoveInfo(entry) {
     for (const segment of segments) {
         comment.append(renderSegment(segment))
     }
+}
+
+/** The books and professionals Josekipedia cites for a move. */
+function renderSources(sources = []) {
+    const items = sources.map(describeSource).filter(Boolean)
+    $('#move-sources').hidden = !items.length
+    $('#move-sources ul').replaceChildren(...items.map((source) => {
+        const li = document.createElement('li')
+        li.append(sourceTitle(source))
+        if (source.detail) { li.append(` · ${cleanText(source.detail)}`) }
+        return li
+    }))
+}
+
+/** A source's title, linked to its Sensei's Library page if it has one. */
+function sourceTitle({ title, url }) {
+    if (!url) { return document.createTextNode(title) }
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.textContent = title
+    a.title = 'About this book on Sensei’s Library'
+    return a
 }
 
 function renderSegment(segment) {
@@ -1414,6 +1441,12 @@ function renderSegment(segment) {
             button.addEventListener('mouseleave', () => setHoverMark(null))
             button.addEventListener('click', () => togglePinnedMark(segment.coord))
             return button
+        }
+        case 'source': {
+            const span = document.createElement('cite')
+            span.append(sourceTitle(segment))
+            if (segment.detail) { span.append(` (${segment.detail})`) }
+            return span
         }
         case 'url': {
             const a = document.createElement('a')
