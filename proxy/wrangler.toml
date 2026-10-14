@@ -6,7 +6,9 @@ compatibility_date = "2026-01-01"
 [vars]
 ALLOWED_ORIGIN = "https://josekipractice.neocities.org"
 
-# Shared cache of Josekipedia nodes across all Cloudflare locations (see cloudflare-worker.js)
-[[kv_namespaces]]
-binding = "NODES"
-id = "43659723d419412caebf499ead5c1ab4"
+# Shared store of Josekipedia nodes across all Cloudflare locations (see cloudflare-worker.js).
+# Its table is made by schema.sql:  npx wrangler d1 execute joseki-nodes --remote --file schema.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "joseki-nodes"
+database_id = "9101013a-92cb-4e04-9120-156fa2be7fb7"

@@ -3,18 +3,23 @@
 //
 // Deploy:  cd proxy && npx wrangler deploy   (settings are in wrangler.toml)
 // Then set PRODUCTION_NODE_URL in js/config.js to  https://joseki-proxy.<your-subdomain>.workers.dev/api/node/{id}
+// The database's table is made by schema.sql:  npx wrangler d1 execute joseki-nodes --remote --file schema.sql
 //
 // Only /api/node/{numeric id} is forwarded, so this can't be used as an open proxy.
 //
 // To put as little load on Josekipedia as possible, each node is looked up in three places:
 //   1. this data center's cache (fast, but each Cloudflare location has its own)
-//   2. a KV store shared by every location (env.NODES), so a node is fetched from Josekipedia
-//      once for everyone, then kept for KV_SECONDS
+//   2. a D1 database shared by every location (env.DB), so a node is fetched from Josekipedia
+//      once for everyone, then kept for STORE_SECONDS (the free plan allows 100,000 new nodes a
+//      day, and the whole of Josekipedia fits comfortably)
 //   3. Josekipedia itself, only if neither has it
-// The X-Joseki-Cache response header says which one answered (edge, kv or origin).
+// The X-Joseki-Cache response header says which one answered (edge, d1 or origin).
+//
+// Every step can fail without failing the request: if the database is unavailable or over a
+// limit, nodes still come from the cache or from Josekipedia.
 
 const EDGE_SECONDS = 60 * 60 * 24 * 30
-const KV_SECONDS = 60 * 60 * 24 * 180
+const STORE_SECONDS = 60 * 60 * 24 * 180
 
 export default {
     async fetch(request, env, ctx) {
@@ -31,7 +36,7 @@ export default {
         if (request.method !== 'GET' || !match) {
             return new Response('Not found', { status: 404, headers: cors })
         }
-        const id = match[1]
+        const id = Number(match[1])
 
         const respond = (body, source) => new Response(body, {
             headers: {
@@ -43,16 +48,18 @@ export default {
         })
         const cacheKey = new Request(`https://josekipedia-cache/node/${id}`)
         const cache = caches.default
+        const now = Math.floor(Date.now() / 1000)
 
         // 1. This data center's cache
-        const cached = await cache.match(cacheKey)
+        const cached = await cache.match(cacheKey).catch(() => null)
         if (cached) { return respond(await cached.text(), 'edge') }
 
-        // 2. The shared store
-        const stored = env.NODES && await env.NODES.get(id)
+        // 2. The shared database (anything older than STORE_SECONDS is fetched again)
+        const stored = await env.DB?.prepare('SELECT body FROM nodes WHERE id = ? AND fetched > ?')
+            .bind(id, now - STORE_SECONDS).first('body').catch(() => null)
         if (stored) {
-            ctx.waitUntil(cache.put(cacheKey, respond(stored, 'edge')))
-            return respond(stored, 'kv')
+            ctx.waitUntil(cache.put(cacheKey, respond(stored, 'edge')).catch(() => {}))
+            return respond(stored, 'd1')
         }
 
         // 3. Josekipedia
@@ -62,9 +69,9 @@ export default {
             return new Response('Upstream error', { status: 502, headers: cors }) // Never cache errors
         }
         ctx.waitUntil(Promise.all([
-            cache.put(cacheKey, respond(body, 'edge')),
-            // The free plan allows 1,000 writes a day; past that this fails and the node is simply refetched later
-            env.NODES?.put(id, body, { expirationTtl: KV_SECONDS }).catch(() => {}),
+            cache.put(cacheKey, respond(body, 'edge')).catch(() => {}),
+            env.DB?.prepare('INSERT OR REPLACE INTO nodes (id, body, fetched) VALUES (?, ?, ?)')
+                .bind(id, body, now).run().catch(() => {}),
         ]))
         return respond(body, 'origin')
     },
