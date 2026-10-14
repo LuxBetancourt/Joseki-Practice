@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
     showMoveInfo: true,
     showFollowUps: false,
     autoAdvance: false, // Go to the next problem automatically after solving one
+    shapeBothSides: false, // In Final Shape, the player plays the other side's moves too
     expanded: [], // Starting-point branches the player has expanded
     start: 'empty',
 }
@@ -177,7 +178,9 @@ const answerIndex = () => problem.index + (['shape', 'sente'].includes(problem.k
 const navigationLocked = () => problemPending() && ['shape', 'sente', 'path', 'better', 'tenuki'].includes(problem.kind)
 
 const currentEntry = () => history[current]
-const isHumanTurn = (entry = currentEntry()) => freePlay || entry.position.toPlay === humanColor()
+// A Final Shape problem being played out with both sides by the player (see settings.shapeBothSides)
+const playingBothSides = () => Boolean(problem?.bothSides && problemPending())
+const isHumanTurn = (entry = currentEntry()) => freePlay || playingBothSides() || entry.position.toPlay === humanColor()
 // Path problems are answered by picking a sequence, not by playing on the board
 const canPlayOnBoard = () => !busy && isHumanTurn() && !(problemPending() && ['path', 'better', 'tenuki'].includes(problem.kind))
 
@@ -297,12 +300,13 @@ async function gradeShapeAnswer(coord) {
     const start = history[at]
     if (++problem.attempts === 1) { ++stats.shape.attempted }
 
+    const mover = problem.line[problem.step].color // The player's color, or either with both sides
     let rest = coord === problem.line[problem.step].move ? problem.line.slice(problem.step + 1) : null
     let type = null
     try {
         setBusy(true)
         await resolveNode(at)
-        const child = start.node?.children.find((c) => c.move === coord && c.color === humanColor())
+        const child = start.node?.children.find((c) => c.move === coord && c.color === mover)
         type = child ? child.type : null
         if (!rest && (type === MoveType.IDEAL || type === MoveType.GOOD)) {
             const line = await lineAfter(child, start.position)
@@ -319,7 +323,7 @@ async function gradeShapeAnswer(coord) {
         }
         const point = fromSgf(coord)
         let message = moveTypeMessage(type)
-        if (point && problem.target.at(point.x, point.y) === humanColor()) {
+        if (point && problem.target.at(point.x, point.y) === mover) {
             message = `That stone is part of the shape, but it isn’t played ${problem.step ? 'next' : 'first'}.`
         }
         else if (type === MoveType.IDEAL || type === MoveType.GOOD) { message = 'That’s joseki, but it leads to a different shape.' }
@@ -328,7 +332,7 @@ async function gradeShapeAnswer(coord) {
         return
     }
 
-    problem.line = [...problem.line.slice(0, problem.step), { move: coord, color: humanColor() }, ...rest]
+    problem.line = [...problem.line.slice(0, problem.step), { move: coord, color: mover }, ...rest]
     problem.step += 1
     problem.hint = false
     continueShape()
@@ -338,7 +342,7 @@ async function gradeShapeAnswer(coord) {
 async function continueShape() {
     const gen = generation
     setBusy(true)
-    while (problem.step < problem.line.length && problem.line[problem.step].color !== humanColor()) {
+    while (problem.step < problem.line.length && !problem.bothSides && problem.line[problem.step].color !== humanColor()) {
         await delay(450)
         if (gen !== generation) { return }
         const { move, color } = problem.line[problem.step]
@@ -491,8 +495,12 @@ const problemPrompt = () => {
     const you = capitalize(colorName(humanColor()))
     if (problem.kind === 'next') { return `${you} to play. Find the joseki move.` }
     if (problem.kind === 'shape') {
-        if (!problem.step) { return `${you} to play. Play out the joseki to reach the faded shape; the computer plays the other side.` }
-        const left = problem.line.slice(problem.step).filter((m) => m.color === humanColor()).length
+        if (!problem.step) {
+            return problem.bothSides
+                ? `${you} to play. Play out the joseki, both sides, to reach the faded shape.`
+                : `${you} to play. Play out the joseki to reach the faded shape; the computer plays the other side.`
+        }
+        const left = problem.line.slice(problem.step).filter((m) => problem.bothSides || m.color === humanColor()).length
         return `Keep going: ${left} more move${left === 1 ? '' : 's'} to reach the shape.`
     }
     if (problem.kind === 'path') { return 'Which sequence is joseki, with both sides playing joseki moves from here?' }
@@ -624,6 +632,7 @@ function presentProblem(found, kind, { reviewKey = null, color = humanColor(), l
         reviewKey,
         link, // Opened from a link: keep it, as rebuilding can reorder Pick the Path's sequences
         ladder, // { color, moves, stone }: a ladder the problem relies on, and the stone that decides it
+        bothSides: kind === 'shape' && settings.shapeBothSides, // The player plays both colors
     }
     noteShown(kind, found.moves) // Reviews and links count too: they're practice of that type all the same
     showTypeBanner(kind, Boolean(reviewKey))

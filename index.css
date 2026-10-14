@@ -868,3 +868,6 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     #type-banner.play .type-banner-name, #type-banner.play .type-banner-goal { animation: none; }
     @keyframes banner-fade { 0% { opacity: 0; } 15%, 75% { opacity: 1; } 100% { opacity: 0; } }
 }
+
+/* An option for the problem type above it */
+#problem-types .sub-option { margin-left: 1.4rem; font-size: .9em; }
