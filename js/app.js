@@ -186,6 +186,9 @@ const isHumanTurn = (entry = currentEntry()) => freePlay || playingBothSides() |
 const canPlayOnBoard = () => !busy && !replaying() && isHumanTurn() && !(problemPending() && ['path', 'better', 'tenuki'].includes(problem.kind))
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+// While the next problem is being found, the last one's bar, answer buttons and cards stay where
+// they are, greyed out, so nothing jumps around until the new problem replaces them
+const findingProblem = () => busy && !problem && settings.mode !== 'explore'
 
 const view = new BoardView($('#board'), {
     onPlay: (x, y) => {
@@ -952,9 +955,11 @@ function render() {
     renderLadderNote()
 
     // Pick the Path shows only the sequences, not the board
-    const pathProblem = problem?.kind === 'path' && current >= problem.index
-    $('#board-wrap').hidden = pathProblem
-    $('#board-hint').hidden = pathProblem
+    if (!findingProblem()) {
+        const pathProblem = problem?.kind === 'path' && current >= problem.index
+        $('#board-wrap').hidden = pathProblem
+        $('#board-hint').hidden = pathProblem
+    }
     // Look, don't play (see .view-only); Who's Better? is answered by clicking the stones instead
     $('#board-wrap').classList.toggle('view-only', answeredWithButtons() && !answeredOnBoard())
     $('#board-wrap').classList.toggle('answer-on-board', answeredOnBoard())
@@ -965,9 +970,9 @@ function render() {
 
     const toPlay = capitalize(colorName(position.toPlay))
     const showingWrongAnswer = problemPending() && current > answerIndex()
-    const findingProblem = busy && !problem && settings.mode !== 'explore'
     $('#status .spinner').hidden = !busy || showingWrongAnswer
-    $('#board-loading').hidden = !findingProblem // Finding a problem can take a few seconds
+    $('#board-loading').hidden = !findingProblem() // Finding a problem can take a few seconds
+    $('#board-area').classList.toggle('finding', findingProblem())
     $('#status-text').textContent = showingWrongAnswer ? '' : replaying() ? 'Playing the moves… click the board to skip' : busy
         ? (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
         : problemPending() && problem.kind === 'path' ? 'Choose a sequence below'
@@ -978,7 +983,7 @@ function render() {
 
     // Each problem type has its own color (see [data-kind] in the CSS)
     if (problem) { $('#board-area').dataset.kind = problem.kind }
-    else { delete $('#board-area').dataset.kind }
+    else if (!findingProblem()) { delete $('#board-area').dataset.kind }
     renderProblemBar()
     renderReviewStatus()
     updateUrl(entry)
@@ -1110,8 +1115,12 @@ function nudgeAnswerButtons() {
 
 function renderAnswerChoices() {
     const container = $('#answer-choices')
+    if (findingProblem()) {
+        container.querySelectorAll('button').forEach((button) => { button.disabled = true })
+        return
+    }
     const choices = problem && ANSWER_CHOICES[problem.kind]
-    container.hidden = !choices || current < problem.index
+    container.hidden = !choices
     if (container.hidden) { return }
 
     if (answerChoicesFor !== problem) {
@@ -1128,7 +1137,7 @@ function renderAnswerChoices() {
     }
     const answered = !problemPending()
     for (const button of $('#answer-buttons').children) {
-        button.disabled = answered || busy
+        button.disabled = answered || busy || current < problem.index // Not before the problem's position (a replay)
         button.classList.toggle('correct', answered && button.dataset.value === problem.answer)
         button.classList.toggle('wrong', answered && button.dataset.value === problem.picked && problem.picked !== problem.answer)
     }
@@ -1192,6 +1201,10 @@ let pathChoicesFor = null // The problem the choice cards were built for
 
 function renderPathChoices() {
     const container = $('#path-choices')
+    if (findingProblem()) {
+        container.querySelectorAll('button').forEach((button) => { button.disabled = true })
+        return
+    }
     const show = problem?.kind === 'path' && current >= problem.index
     container.hidden = !show
     if (!show) { return }
@@ -1387,6 +1400,10 @@ function renderProblemBar() {
         return
     }
 
+    $('#show-answer').disabled = !problemPending() || busy
+    $('#explore-problem').disabled = busy
+    if (findingProblem()) { return } // The last problem's tag and prompt stay up, greyed out
+
     $('#problem-kind').textContent = problem ? PROBLEM_TYPE_NAMES[problem.kind] + (problem.reviewKey ? ' · Review' : '') : ''
     $('#problem-kind').hidden = !problem
 
@@ -1404,12 +1421,10 @@ function renderProblemBar() {
     }
     $('#problem-prompt').textContent = prompt
     $('#problem-text').title = prompt // In case two lines cut it off
-    $('#show-answer').disabled = !problemPending() || busy
     // Once answered, Show Answer gives way to taking the position into Explore
     const answered = Boolean(problem) && !problemPending()
     $('#show-answer').hidden = answered
     $('#explore-problem').hidden = !answered
-    $('#explore-problem').disabled = busy
     const kinds = Object.keys(stats)
     const solved = kinds.reduce((sum, kind) => sum + stats[kind].solved, 0)
     const attempted = kinds.reduce((sum, kind) => sum + stats[kind].attempted, 0)

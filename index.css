@@ -410,6 +410,7 @@ body:not([data-mode="problems"]) .problems-only { display: none; }
 #problem-text {
     flex: 1;
     min-width: 0;
+    height: 2.7em; /* Always two lines (see line-height), so short and long prompts start in the same place */
     margin: 0;
     font-weight: 600;
     line-height: 1.35;
@@ -871,3 +872,8 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 
 /* An option for the problem type above it */
 #problem-types .sub-option { margin-left: 1.4rem; font-size: .9em; }
+
+/* While the next problem is found, the last one's bar, answers and cards stay put, greyed out */
+#board-area.finding #problem-text,
+#board-area.finding #answer-choices,
+#board-area.finding #path-choices { opacity: .4; transition: opacity .15s; }
