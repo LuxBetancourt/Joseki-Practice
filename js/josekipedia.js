@@ -116,8 +116,28 @@ async function download(id) {
     return raw
 }
 
+// The empty board, which every problem and game starts from, comes with the site rather than from
+// the proxy (refresh it with tools/update-root-node.mjs)
+const ROOT_NODE_URL = new URL('../resources/root-node.json', import.meta.url)
+
+async function rootNode() {
+    try {
+        const response = await fetch(ROOT_NODE_URL)
+        if (response.ok) { return await response.json() }
+    }
+    catch { /* Offline: fall back on the copy in storage, if there is one */ }
+    const stored = await readStorage(ROOT_ID)
+    if (stored) { return stored }
+    throw new Error('Couldn’t load the opening position')
+}
+
 /** Returns a promise for the full node (including children). Failed requests aren't cached. */
 export function getNode(id) {
+    if (!memory.has(id) && id === ROOT_ID) {
+        const promise = rootNode().then(normalizeFull)
+        promise.catch(() => memory.delete(id))
+        memory.set(id, promise)
+    }
     if (!memory.has(id)) {
         const promise = readStorage(id).then(async (stored) => {
             if (stored) { return normalizeFull(stored) }
