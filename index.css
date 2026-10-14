@@ -277,7 +277,7 @@ kbd {
     pointer-events: none;
     background: rgba(255, 255, 255, .88);
     color: #222;
-    border-left: 4px solid var(--good);
+    border: 2px solid var(--good); /* Colored by the kind of message, below */
     border-radius: 6px;
     padding: .45em .9em;
     box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
@@ -767,8 +767,8 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     box-sizing: border-box;
     margin: .6rem 0 0;
     padding: .5rem .8rem;
-    border-left: 3px solid var(--accent);
-    border-radius: 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
     background: var(--panel);
     font-size: .9rem;
 }
@@ -796,7 +796,6 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 [data-kind="sente"] { --kind: #d4af37; --kind-text: #1b1a18; }
 
 #board-area[data-kind] #problem-kind { background: var(--kind); border-color: var(--kind); color: var(--kind-text); font-weight: 700; }
-#board-area[data-kind] #problem-bar { border-left: 5px solid var(--kind); }
 #board-area[data-kind] #board { outline: 3px solid var(--kind); outline-offset: 2px; } /* Outside the board, where wood-like colors still show */
 #board-area[data-kind] #board-wrap.view-only #board,
 #board-area[data-kind] #board-wrap.answer-on-board #board { outline-color: var(--kind); outline-offset: 2px; }
