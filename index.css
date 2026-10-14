@@ -846,19 +846,19 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 @keyframes banner-sweep {
     0% { transform: translateX(-120%) skewX(-14deg); animation-timing-function: cubic-bezier(.05, .8, .2, .99); }
     14% { transform: translateX(-2%) skewX(-14deg); animation-timing-function: linear; }
-    80% { transform: translateX(2%) skewX(-14deg); animation-timing-function: cubic-bezier(.75, .02, .9, .4); }
+    86% { transform: translateX(2%) skewX(-14deg); animation-timing-function: cubic-bezier(.5, .1, .8, .6); }
     100% { transform: translateX(120%) skewX(-14deg); }
 }
 @keyframes banner-name {
     0% { transform: translateX(-70vw); animation-timing-function: cubic-bezier(.08, .85, .2, .99); }
     20% { transform: translateX(-1.2vw); animation-timing-function: linear; }
-    74% { transform: translateX(1.2vw); animation-timing-function: cubic-bezier(.75, .02, .9, .4); }
-    96%, 100% { transform: translateX(80vw); }
+    83% { transform: translateX(1.2vw); animation-timing-function: cubic-bezier(.5, .1, .8, .6); }
+    97%, 100% { transform: translateX(80vw); }
 }
 @keyframes banner-goal {
     0%, 4% { transform: translateX(-90vw); animation-timing-function: cubic-bezier(.06, .8, .2, .99); }
     26% { transform: translateX(-.8vw); animation-timing-function: linear; }
-    78% { transform: translateX(.8vw); animation-timing-function: cubic-bezier(.7, .02, .88, .45); }
+    85% { transform: translateX(.8vw); animation-timing-function: cubic-bezier(.5, .1, .8, .6); }
     100% { transform: translateX(70vw); }
 }
 @keyframes banner-hide { to { visibility: hidden; } }
