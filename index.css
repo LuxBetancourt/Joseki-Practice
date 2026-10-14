@@ -145,7 +145,8 @@ kbd {
 
 @media (max-width: 1050px) {
     #layout {
-        grid-template-columns: 1fr 1fr;
+        /* minmax(0, …): nothing inside may make a column wider than the screen */
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         grid-template-areas:
             "board   board"
             "info    info"
@@ -156,7 +157,7 @@ kbd {
 @media (max-width: 640px) {
     #layout {
         padding: 0 .5rem 2rem;
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
         grid-template-areas: "board" "info" "follow-ups" "setup" "options";
     }
     .site-header h1 { font-size: 1.2rem; }
@@ -201,6 +202,14 @@ kbd {
     text-overflow: ellipsis;
 }
 #score { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+/* Phones: the buttons on one row, then the status and score on their own row below */
+@media (max-width: 640px) {
+    #board-controls { height: auto; flex-wrap: wrap; row-gap: .25rem; }
+    #board-controls button { padding: .4em .65em; font-size: .85rem; }
+    #redo { margin-right: auto; } /* Undo and Redo on the left, the rest on the right */
+    #status { order: 1; flex: 1 0 60%; text-align: left; font-size: .85rem; } /* Too wide to share the buttons' row */
+    #score { order: 2; }
+}
 #board-wrap { position: relative; }
 #board {
     display: block;
@@ -637,7 +646,9 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     color: white;
     font-size: .85rem;
     font-weight: 600;
-    white-space: nowrap;
+    width: max-content;
+    max-width: calc(100% - 1rem); /* Wraps rather than widening the page on narrow screens */
+    text-align: center;
     pointer-events: none;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
 }
@@ -676,7 +687,9 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     color: white;
     font-size: .85rem;
     font-weight: 600;
-    white-space: nowrap;
+    width: max-content;
+    max-width: calc(100% - 1rem); /* Wraps rather than widening the page on narrow screens */
+    text-align: center;
     pointer-events: none;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
 }
@@ -714,6 +727,12 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     box-shadow: 0 6px 24px rgba(0, 0, 0, .3);
 }
 #add-review-menu[hidden] { display: none; }
+@media (max-width: 640px) {
+    /* Too little room beside the button: span the toolbar instead */
+    #board-controls { position: relative; }
+    #add-review-wrap { position: static; }
+    #add-review-menu { left: 0; right: 0; width: auto; max-width: none; }
+}
 #add-review-menu button {
     display: flex;
     flex-direction: column;
