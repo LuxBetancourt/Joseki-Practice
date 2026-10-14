@@ -774,3 +774,5 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 }
 #ladder-note[hidden] { display: none; }
 @media (max-width: 640px) { #ladder-note { min-width: 0; } }
+
+#show-answer[hidden], #explore-problem[hidden] { display: none; }

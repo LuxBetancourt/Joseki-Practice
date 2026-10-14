@@ -1216,6 +1216,11 @@ function renderProblemBar() {
     $('#problem-prompt').textContent = prompt
     $('#problem-text').title = prompt // In case two lines cut it off
     $('#show-answer').disabled = !problemPending() || busy
+    // Once answered, Show Answer gives way to taking the position into Explore
+    const answered = Boolean(problem) && !problemPending()
+    $('#show-answer').hidden = answered
+    $('#explore-problem').hidden = !answered
+    $('#explore-problem').disabled = busy
     const kinds = Object.keys(stats)
     const solved = kinds.reduce((sum, kind) => sum + stats[kind].solved, 0)
     const attempted = kinds.reduce((sum, kind) => sum + stats[kind].attempted, 0)
@@ -1606,6 +1611,7 @@ function bindControls() {
         }
     })
     $('#show-answer').addEventListener('click', revealAnswer)
+    $('#explore-problem').addEventListener('click', exploreFromHere)
     $('#next-problem').addEventListener('click', () => newProblem())
     // Reviews become due over time, so keep the counts fresh
     setInterval(() => {
@@ -1762,6 +1768,12 @@ async function loadSharedProblem(spec, link, previousPlayer, reviewKey) {
         const message = error instanceof StaleProblemError ? 'That problem is no longer in Josekipedia.' : 'Couldn’t load that problem.'
         toast(message, 'error', { label: 'New Problem', action: () => newProblem() })
     }
+}
+
+/** Takes the position on the board into Explore mode, as a link to it would. */
+function exploreFromHere() {
+    window.history.replaceState(null, '', `#path=${currentEntry().path}`)
+    if (!openSharedPosition()) { switchMode('explore') } // The empty board has no path
 }
 
 /**
