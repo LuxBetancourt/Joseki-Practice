@@ -30,7 +30,12 @@
 <main id="reviews-page">
     <div class="panel reviews-toolbar">
         <p id="reviews-summary"></p>
-        <button type="button" id="remove-all">Remove all…</button>
+        <div class="reviews-actions">
+            <button type="button" id="export-reviews" title="Save your reviews to a file, to back them up or move them to another browser">Export</button>
+            <button type="button" id="import-reviews" title="Add the reviews from an exported file">Import…</button>
+            <input type="file" id="import-file" accept=".json,application/json" hidden>
+            <button type="button" id="remove-all">Remove all…</button>
+        </div>
     </div>
     <div class="panel undo-bar" id="undo-bar" hidden>
         <span id="undo-text"></span>

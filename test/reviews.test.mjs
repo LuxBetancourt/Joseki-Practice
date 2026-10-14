@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ReviewDeck, reviewKey } from '../js/reviews.js'
+import { ReviewDeck, reviewKey, readExport } from '../js/reviews.js'
 
 const MINUTE = 60 * 1000
 const HOUR = 60 * MINUTE
@@ -107,4 +107,51 @@ test('removed items can be restored', () => {
     assert.equal(deck.size, 2)
     deck.restore(removed)
     assert.equal(deck.size, 2, 'no duplicates')
+})
+
+test('export and import: problems move to another browser with their schedules', () => {
+    const { deck, clock } = makeDeck()
+    deck.recordMiss(spec(['pd', 'qf', 'nc']))
+    deck.recordMiss(spec(['qd', 'od', 'oc'], 'shape', 2, { answer: 'qc' }))
+    deck.recordSuccess(deck.items[0].key)
+    const text = deck.export()
+
+    const other = makeDeck().deck
+    const added = other.import(text)
+    assert.equal(added.length, 2)
+    assert.deepEqual(other.items, JSON.parse(JSON.stringify(deck.items)))
+    assert.equal(other.items[0].due, clock.now + HOUR, 'keeps its place in the schedule')
+})
+
+test('import: problems already saved keep their own schedule, and nothing is doubled', () => {
+    const { deck } = makeDeck()
+    deck.recordMiss(spec(['pd', 'qf', 'nc']))
+    const text = deck.export()
+    const other = makeDeck().deck
+    other.recordMiss(spec(['pd', 'qf', 'nc']))
+    other.recordSuccess(other.items[0].key)
+    const due = other.items[0].due
+    assert.deepEqual(other.import(text), [])
+    assert.equal(other.size, 1)
+    assert.equal(other.items[0].due, due)
+})
+
+test('import: rejects other files, and skips damaged problems', () => {
+    for (const bad of ['', 'not json', '{"items":[]}', JSON.stringify({ app: 'something-else', items: [] })]) {
+        assert.throws(() => readExport(bad), undefined, bad)
+    }
+    const good = { kind: 'next', moves: ['pd', 'qf'], color: 1, data: {}, due: 5, lapses: 2, step: 1 }
+    const items = readExport(JSON.stringify({ app: 'joseki-practice-reviews', version: 1, items: [
+        good,
+        { ...good, kind: 'nope' },
+        { ...good, moves: ['zz9'] },
+        { ...good, color: 3 },
+        { ...good, due: 'soon' },
+        { ...good, moves: ['qd'], step: 99, lapses: -1, key: 'forged' },
+    ] }))
+    assert.equal(items.length, 2)
+    assert.equal(items[0].key, reviewKey(good))
+    assert.equal(items[1].key, 'next:qd:', 'the key is worked out again, not trusted')
+    assert.equal(items[1].step, 5)
+    assert.equal(items[1].lapses, 1)
 })

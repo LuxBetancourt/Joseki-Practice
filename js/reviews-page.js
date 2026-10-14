@@ -1,4 +1,5 @@
-// The Saved Reviews page: lists the review deck, with removing (and undoing removals).
+// The Saved Reviews page: lists the review deck, with removing (and undoing removals), and
+// exporting it to a file or importing one.
 
 import { ReviewDeck, relativeTime } from './reviews.js'
 import { Position, colorName, PASS, fromSgf } from './go.js'
@@ -11,7 +12,7 @@ const KIND_NAMES = {
 }
 
 const deck = new ReviewDeck()
-let lastRemoved = [] // For undo
+let undo = null // Puts back the last removal or import
 
 const capitalize = (s) => s[0].toUpperCase() + s.slice(1)
 
@@ -37,6 +38,7 @@ function render() {
         summary.replaceChildren('No saved reviews. Problems you miss are saved here. ', back)
     }
     $('#remove-all').hidden = !deck.size
+    $('#export-reviews').hidden = !deck.size
 
     const list = $('#review-list')
     list.replaceChildren(...[...deck.items].sort((a, b) => a.due - b.due).map((item) => card(item, now)))
@@ -75,13 +77,53 @@ function card(item, now) {
     return li
 }
 
-function removeItems(items, message) {
-    lastRemoved = items
-    for (const item of items) { deck.remove(item.key) }
+/** Shows `message`, with an Undo button that runs `action` (if there is one). */
+function offerUndo(message, action) {
+    undo = action
     $('#undo-text').textContent = message
+    $('#undo-remove').hidden = !action
     $('#undo-bar').hidden = false
+}
+
+function removeItems(items, message) {
+    for (const item of items) { deck.remove(item.key) }
+    offerUndo(message, () => deck.restore(items))
     render()
 }
+
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+$('#export-reviews').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([deck.export()], { type: 'application/json' }))
+    const link = Object.assign(document.createElement('a'), {
+        href: url,
+        download: `joseki-practice-reviews-${new Date().toISOString().slice(0, 10)}.json`,
+    })
+    document.body.append(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+})
+
+$('#import-reviews').addEventListener('click', () => $('#import-file').click())
+$('#import-file').addEventListener('change', async () => {
+    const file = $('#import-file').files[0]
+    $('#import-file').value = '' // So choosing the same file again still counts as a change
+    if (!file) { return }
+    let added
+    try { added = deck.import(await file.text()) }
+    catch (error) {
+        alert(error.message)
+        return
+    }
+    if (added.length) {
+        offerUndo(`Imported ${plural(added.length, 'problem')}.`, () => added.forEach((item) => deck.remove(item.key)))
+    }
+    else {
+        offerUndo('Nothing new to import: you already have every problem in that file.', null)
+    }
+    render()
+})
 
 $('#remove-all').addEventListener('click', () => {
     if (confirm(`Remove all ${deck.size} saved problems?`)) {
@@ -90,8 +132,8 @@ $('#remove-all').addEventListener('click', () => {
 })
 
 $('#undo-remove').addEventListener('click', () => {
-    deck.restore(lastRemoved)
-    lastRemoved = []
+    undo?.()
+    undo = null
     $('#undo-bar').hidden = true
     render()
 })

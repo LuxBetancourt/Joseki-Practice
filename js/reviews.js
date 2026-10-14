@@ -104,4 +104,47 @@ export class ReviewDeck {
     nextDue() {
         return this.items.length ? Math.min(...this.items.map((item) => item.due)) : null
     }
+
+    /** The deck as a file's text, for backing up or moving to another browser (see readExport). */
+    export() {
+        return JSON.stringify({ app: EXPORT_APP, version: 1, exported: new Date(this.now()).toISOString(), items: this.items }, null, 1)
+    }
+
+    /**
+     * Adds the problems from an exported file that aren't already in the deck (ones that are keep
+     * their own schedule). Returns the items added. Throws if the text isn't an export.
+     */
+    import(text) {
+        const added = readExport(text).filter((item) => !this.find(item.key))
+        this.items.push(...added)
+        this.save()
+        return added
+    }
+}
+
+const EXPORT_APP = 'joseki-practice-reviews'
+const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki']
+
+/** The valid items in an exported deck, skipping any that are damaged. Throws if it isn't an export at all. */
+export function readExport(text) {
+    let file
+    try { file = JSON.parse(text) }
+    catch { throw new Error('That file isn’t a Joseki Practice reviews export.') }
+    if (file?.app !== EXPORT_APP || !Array.isArray(file.items)) { throw new Error('That file isn’t a Joseki Practice reviews export.') }
+    const valid = (item) => item && KINDS.includes(item.kind)
+        && Array.isArray(item.moves) && item.moves.every((move) => typeof move === 'string' && /^[a-t]{2}$/.test(move))
+        && (item.color === 1 || item.color === 2)
+        && item.data && typeof item.data === 'object'
+        && Number.isFinite(item.due)
+    return file.items.filter(valid).map((item) => ({
+        key: reviewKey(item),
+        kind: item.kind,
+        moves: item.moves,
+        color: item.color,
+        data: item.data,
+        added: Number.isFinite(item.added) ? item.added : item.due,
+        lapses: Number.isInteger(item.lapses) && item.lapses > 0 ? item.lapses : 1,
+        step: Number.isInteger(item.step) ? Math.min(Math.max(item.step, 0), REVIEW_STEPS.length - 1) : 0,
+        due: item.due,
+    }))
 }
