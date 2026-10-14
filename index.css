@@ -838,7 +838,9 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     text-align: center;
 }
 .type-banner-goal { font-size: clamp(.9rem, 2.5vw, 1.15rem); font-weight: 600; opacity: .9; text-align: center; }
-#type-banner.play .type-banner-name { animation: banner-name 1.7s ease-out forwards; }
+/* The text follows the band in from the left and leaves to the right, each at its own pace */
+#type-banner.play .type-banner-name { animation: banner-name 1.7s linear forwards; }
+#type-banner.play .type-banner-goal { animation: banner-goal 1.7s linear forwards; }
 @keyframes banner-sweep {
     0% { transform: translateX(-120%) skewX(-14deg); }
     22% { transform: translateX(0) skewX(-14deg); }
@@ -846,14 +848,21 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     100% { transform: translateX(120%) skewX(-14deg); }
 }
 @keyframes banner-name {
-    0%, 12% { letter-spacing: .6em; opacity: 0; }
-    35% { letter-spacing: .02em; opacity: 1; }
-    100% { letter-spacing: .02em; opacity: 1; }
+    0% { transform: translateX(-70vw); animation-timing-function: cubic-bezier(.15, .9, .25, 1); }
+    30% { transform: translateX(0); }
+    72% { transform: translateX(0); animation-timing-function: cubic-bezier(.6, 0, .9, .4); }
+    96%, 100% { transform: translateX(80vw); }
+}
+@keyframes banner-goal {
+    0%, 6% { transform: translateX(-90vw); animation-timing-function: cubic-bezier(.1, .7, .2, 1); }
+    38% { transform: translateX(0); }
+    76% { transform: translateX(0); animation-timing-function: cubic-bezier(.5, 0, .8, .5); }
+    100% { transform: translateX(70vw); }
 }
 @keyframes banner-hide { to { visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) {
     .type-banner-band { transform: none; }
     #type-banner.play .type-banner-band { animation: banner-fade 1.4s ease forwards; }
-    #type-banner.play .type-banner-name { animation: none; }
+    #type-banner.play .type-banner-name, #type-banner.play .type-banner-goal { animation: none; }
     @keyframes banner-fade { 0% { opacity: 0; } 15%, 75% { opacity: 1; } 100% { opacity: 0; } }
 }
