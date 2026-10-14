@@ -828,7 +828,7 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     box-shadow: 0 8px 30px rgba(0, 0, 0, .45);
     transform: translateX(-120%) skewX(-14deg);
 }
-#type-banner.play .type-banner-band { animation: banner-sweep 1.7s cubic-bezier(.2, .8, .2, 1) forwards; }
+#type-banner.play .type-banner-band { animation: banner-sweep 1.7s linear forwards; }
 .type-banner-name {
     font-size: clamp(1.6rem, 6vw, 2.8rem);
     font-weight: 800;
@@ -841,22 +841,24 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 /* The text follows the band in from the left and leaves to the right, each at its own pace */
 #type-banner.play .type-banner-name { animation: banner-name 1.7s linear forwards; }
 #type-banner.play .type-banner-goal { animation: banner-goal 1.7s linear forwards; }
+/* Fast in, a slow drift through the middle rather than a stop, then fast out: each easing meets
+   the drift at about its speed, so the motion never jerks */
 @keyframes banner-sweep {
-    0% { transform: translateX(-120%) skewX(-14deg); }
-    22% { transform: translateX(0) skewX(-14deg); }
-    78% { transform: translateX(0) skewX(-14deg); }
+    0% { transform: translateX(-120%) skewX(-14deg); animation-timing-function: cubic-bezier(.1, .75, .3, .97); }
+    22% { transform: translateX(-4%) skewX(-14deg); animation-timing-function: linear; }
+    78% { transform: translateX(4%) skewX(-14deg); animation-timing-function: cubic-bezier(.7, .03, .9, .4); }
     100% { transform: translateX(120%) skewX(-14deg); }
 }
 @keyframes banner-name {
-    0% { transform: translateX(-70vw); animation-timing-function: cubic-bezier(.15, .9, .25, 1); }
-    30% { transform: translateX(0); }
-    72% { transform: translateX(0); animation-timing-function: cubic-bezier(.6, 0, .9, .4); }
+    0% { transform: translateX(-70vw); animation-timing-function: cubic-bezier(.15, .85, .3, .97); }
+    30% { transform: translateX(-2.5vw); animation-timing-function: linear; }
+    72% { transform: translateX(2.5vw); animation-timing-function: cubic-bezier(.7, .03, .9, .4); }
     96%, 100% { transform: translateX(80vw); }
 }
 @keyframes banner-goal {
-    0%, 6% { transform: translateX(-90vw); animation-timing-function: cubic-bezier(.1, .7, .2, 1); }
-    38% { transform: translateX(0); }
-    76% { transform: translateX(0); animation-timing-function: cubic-bezier(.5, 0, .8, .5); }
+    0%, 6% { transform: translateX(-90vw); animation-timing-function: cubic-bezier(.1, .7, .3, .97); }
+    38% { transform: translateX(-1.5vw); animation-timing-function: linear; }
+    76% { transform: translateX(1.5vw); animation-timing-function: cubic-bezier(.6, .03, .85, .45); }
     100% { transform: translateX(70vw); }
 }
 @keyframes banner-hide { to { visibility: hidden; } }
