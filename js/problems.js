@@ -307,6 +307,12 @@ export async function rebuildProblem({ kind, moves, color, data }, { getNode, ra
             const answer = data.answer || (data.inferredFrom ? 'no' : tenukiVerdict(node, color)) || stale('tenuki')
             return { moves, answers, answer, inferredFrom: data.inferredFrom }
         }
+        case 'sente': {
+            // Worked out again from Josekipedia, which may have changed since
+            const options = await senteOptions({ moves, node, position }, getNode)
+            if (!isSenteChoice(options)) { stale('sente') }
+            return { moves, answers, options: options.map(({ move, line, sente }) => ({ move, line, sente })) }
+        }
         default:
             return { moves, answers }
     }
@@ -334,7 +340,75 @@ async function pathFromPicks(start, picks, getNode) {
     return options
 }
 
-const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki']
+const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki', 'sente']
+
+// --- Play for Sente ---------------------------------------------------------------
+
+const MAX_SENTE_LINE = 12 // Longer variations are too much to read out
+
+/**
+ * Who has sente once a joseki line is over (`ended`, from mainLine): the side to play, when the
+ * joseki is finished there, whether Josekipedia says so (settled, tenuki is joseki, or the side to
+ * play can tenuki) or the line simply ends or moves elsewhere on the board, as a finished joseki
+ * does. Null when it isn't clear: something local is still needed, or the line stops for another
+ * reason.
+ */
+function senteAt(node, position, ended) {
+    const toPlay = position.toPlay
+    const verdict = tenukiVerdict(node, toPlay)
+    if (verdict === 'no') { return null }
+    return verdict === 'yes' || ['settled', 'tenuki', 'elsewhere', 'end'].includes(ended) ? toPlay : null
+}
+
+/**
+ * Each joseki move for the side to play, followed to the end of its main line: whether that side
+ * ends with sente (true), gote (false) or Josekipedia doesn't say (null).
+ * Returns [{ move, type, line: [{ move, color }], sente }].
+ */
+async function senteOptions(state, getNode) {
+    const color = state.position.toPlay
+    const options = []
+    for (const child of josekiMoves(state.node, state.position, false)) {
+        const after = await step(state, child, getNode)
+        const rest = await mainLine({ node: after.node, position: after.position, getNode })
+        const line = [{ move: child.move, color }, ...rest.moves]
+        const owner = line.length > MAX_SENTE_LINE ? null : senteAt(rest.node, rest.position, rest.ended)
+        options.push({ move: child.move, type: child.type, line, sente: owner === null ? null : owner === color })
+    }
+    return options
+}
+
+/** The joseki moves for the side to play after `moves`, and whether each ends with that side in sente (see senteOptions). */
+export async function senteOptionsAt(moves, { getNode }) {
+    const state = await replay(moves, getNode)
+    return (await senteOptions(state, getNode)).map(({ move, type, line, sente }) => ({ move, type, line, sente }))
+}
+
+/** A Play for Sente position: some joseki moves end in sente for the player, the others in gote. */
+const isSenteChoice = (options) => options.every((o) => o.sente !== null)
+    && options.some((o) => o.sente) && options.some((o) => !o.sente)
+
+/**
+ * "Play for Sente" problem: `color` is to play and has a choice of joseki moves, some of whose
+ * lines end with `color` in sente and some in gote. The player must find one that keeps sente.
+ * Returns { moves, answers, options: [{ move, line, sente }] } or null.
+ */
+export async function generateSente({ startMoves, color, firstTen, getNode, random = Math.random }) {
+    const candidates = []
+    await walk(await replay(startMoves, getNode), { firstTen, getNode, random }, (state) => {
+        const suitable = state.position.toPlay === color && state.moves.length >= MIN_MOVES
+            && josekiMoves(state.node, state.position, false).length >= 2
+        if (suitable) { candidates.push(state) }
+        return suitable
+    })
+    for (const state of candidates.reverse().slice(0, MAX_LINES_CHECKED)) {
+        const options = await senteOptions(state, getNode)
+        if (isSenteChoice(options)) {
+            return { moves: state.moves, answers: answerTypes(state.node, color), options: options.map(({ move, line, sente }) => ({ move, line, sente })) }
+        }
+    }
+    return null
+}
 
 // --- Spare problems -----------------------------------------------------------------
 // Who's Better? and Tenuki-able? choose their answer first, so a walk often passes positions that
@@ -513,7 +587,7 @@ export async function ladderMoves(kind, problem, { getNode }) {
     }
     const { node, position } = await follow(await getNode(ROOT_ID), new Position(), problem.moves.map((move) => ({ move })))
 
-    if (kind === 'next' || kind === 'punish') {
+    if (kind === 'next' || kind === 'punish' || kind === 'sente') {
         const answers = node.children.filter((child) => child.color === position.toPlay && child.move !== PASS
             && (child.type === MoveType.IDEAL || child.type === MoveType.GOOD))
         found.push(...answers.filter((child) => needsLadder(child.labels))
@@ -705,6 +779,11 @@ export async function problemAt(kind, moves, { color, firstTen = false, getNode,
             }
             return none(`Josekipedia doesn’t say whether ${side} can tenuki here`)
         }
+        case 'sente': {
+            const options = await senteOptions(state, getNode)
+            if (!isSenteChoice(options)) { return none(`${side} has no choice here between ending in sente and in gote`) }
+            return { problem: { moves, answers, options: options.map(({ move, line, sente }) => ({ move, line, sente })), color: toPlay } }
+        }
         default:
             return none('Unknown problem type')
     }
@@ -713,7 +792,7 @@ export async function problemAt(kind, moves, { color, firstTen = false, getNode,
 // Problem links: a letter for the kind, one for the color, the moves, then anything that can't be
 // worked out again from Josekipedia, each after a dot. For example "sbpdqfncqcpc.qe" is a Final
 // Shape problem for Black after pd qf nc qc pc, whose answer is qe.
-const KIND_CODES = { next: 'n', punish: 'p', shape: 's', path: 'l', better: 'b', tenuki: 't' }
+const KIND_CODES = { next: 'n', punish: 'p', shape: 's', path: 'l', better: 'b', tenuki: 't', sente: 'e' }
 const MOVE = '[a-t]{2}'
 
 /** A saved problem ({ kind, moves, color, data }) as a short, URL-safe string, for sharing. */
@@ -735,7 +814,7 @@ function compactData(kind, data) {
 
 /** The reverse of encodeProblem (and of the older, longer JSON links). Throws if the text isn't a problem link. */
 export function decodeProblem(text) {
-    const match = new RegExp(`^([npslbt])([bw])((?:${MOVE})*)((?:\\.[0-9a-t-]+)*)$`).exec(text)
+    const match = new RegExp(`^([npslbte])([bw])((?:${MOVE})*)((?:\\.[0-9a-t-]+)*)$`).exec(text)
     if (!match) { return decodeLegacyProblem(text) }
     const [, code, colorCode, moves, rest] = match
     const kind = KINDS.find((k) => KIND_CODES[k] === code)

@@ -20,21 +20,39 @@ function isNearStones(position, point) {
  * From a fully loaded `node` and the `position` it leads to, repeatedly plays the first ideal
  * move for the side to play. Stops when the joseki ends: the next ideal move is tenuki or far
  * away, there is none, or Josekipedia marks the position as settled.
- * Returns { moves: [{ move, color }], position, node, states }, where states[i] is the
- * { node, position } before moves[i].
+ * Returns { moves: [{ move, color }], position, node, states, ended }, where states[i] is the
+ * { node, position } before moves[i], and `ended` says why it stopped: 'settled', 'tenuki' (the
+ * next ideal move), 'elsewhere' (it's far away), 'end' (nothing more is recorded), 'unclear' (no
+ * ideal move among what is), 'illegal' or 'length'.
  */
 export async function mainLine({ node, position, getNode }) {
     const moves = []
     const states = []
-    while (moves.length < MAX_LENGTH && !node.labels.includes(SETTLED_LABEL)) {
+    let ended = 'length'
+    while (moves.length < MAX_LENGTH) {
+        if (node.labels.includes(SETTLED_LABEL)) {
+            ended = 'settled'
+            break
+        }
         const next = node.children.find((child) => child.color === position.toPlay && child.type === MoveType.IDEAL)
         const point = next && next.move !== PASS && fromSgf(next.move)
-        if (!point || !isNearStones(position, point) || !position.isLegal(point.x, point.y, next.color)) { break }
+        if (!point) {
+            ended = next ? 'tenuki' : node.children.length ? 'unclear' : 'end'
+            break
+        }
+        if (!isNearStones(position, point)) {
+            ended = 'elsewhere'
+            break
+        }
+        if (!position.isLegal(point.x, point.y, next.color)) {
+            ended = 'illegal'
+            break
+        }
 
         states.push({ node, position })
         position = position.play(point.x, point.y, next.color)
         moves.push({ move: next.move, color: next.color })
         node = await getNode(next.id)
     }
-    return { moves, position, node, states }
+    return { moves, position, node, states, ended }
 }

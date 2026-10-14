@@ -133,7 +133,7 @@ export class ReviewDeck {
 }
 
 const EXPORT_APP = 'joseki-practice-reviews'
-const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki']
+const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki', 'sente']
 
 /** The valid items in an exported deck, skipping any that are damaged. Throws if it isn't an export at all. */
 export function readExport(text) {

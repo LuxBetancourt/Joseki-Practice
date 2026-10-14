@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares, problemAt, ladderMoves as findLadderMoves, ladderStonePoint, ladderSetup } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares, problemAt, ladderMoves as findLadderMoves, ladderStonePoint, ladderSetup, generateSente } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -432,4 +432,42 @@ test('ladders: the stone goes in the opposite corner, clear of other stones', as
     const crowded = empty.playSgf('dp', BLACK) // The bottom-left 4-4 is taken
     const point = ladderStonePoint(crowded, 'qd')
     assert.ok(!point || Math.abs(point.x - 3) + Math.abs(point.y - 15) > 0, 'not on or next to the stone there')
+})
+
+// After pd qf nc qc, Black has two joseki moves: qd (White pc, Black od, and the line ends with
+// White to play, so Black ends in gote) and rd (White rc, and it ends with Black to play: sente)
+const senteTree = () => pathTree({
+    44: [{ id: 45, move: 'qd', color: B, type: 0 }, { id: 80, move: 'rd', color: B, type: 0 }],
+    80: [{ id: 81, move: 'rc', color: W, type: 0 }],
+    81: [],
+})
+
+test('play for sente: finds a choice between ending in sente and in gote', async () => {
+    const problem = await generateSente({ startMoves: START, color: BLACK, firstTen: true, getNode: treeGetter(senteTree()), random: sequence([0.1]) })
+    assert.ok(problem)
+    assert.deepEqual(problem.moves, START)
+    const byMove = Object.fromEntries(problem.options.map((o) => [o.move, o]))
+    assert.equal(byMove.rd.sente, true)
+    assert.deepEqual(byMove.rd.line.map((m) => m.move), ['rd', 'rc'])
+    assert.equal(byMove.qd.sente, false)
+    assert.deepEqual(byMove.qd.line.map((m) => m.move), ['qd', 'pc', 'od'])
+})
+
+test('play for sente: needs Josekipedia to settle every choice', async () => {
+    // The rd line stops where Josekipedia still records local moves, but none of them ideal
+    const tree = { ...senteTree(), 81: [{ id: 82, move: 'sc', color: B, type: 2 }] }
+    assert.equal(await generateSente({ startMoves: START, color: BLACK, firstTen: true, getNode: treeGetter(tree), random: sequence([0.1]) }), null)
+})
+
+test('play for sente: survives links and reviews, and can be made from a chosen position', async () => {
+    const getNode = treeGetter(senteTree())
+    const problem = await generateSente({ startMoves: START, color: BLACK, firstTen: true, getNode, random: sequence([0.1]) })
+    const spec = { kind: 'sente', moves: problem.moves, color: BLACK, data: problemData('sente', problem) }
+    const text = encodeProblem(spec)
+    assert.equal(text, 'ebpdqfncqc')
+    const rebuilt = await rebuildProblem(decodeProblem(text), { getNode })
+    assert.deepEqual(rebuilt.options, problem.options)
+    const chosen = await problemAt('sente', START, { color: BLACK, getNode })
+    assert.deepEqual(chosen.problem.options, problem.options)
+    assert.ok((await problemAt('sente', ['pd', 'qf'], { color: BLACK, getNode })).why)
 })

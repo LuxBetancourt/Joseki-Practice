@@ -8,7 +8,7 @@ import { ensureStoneGradients } from './board-view.js'
 
 const $ = (selector) => document.querySelector(selector)
 const KIND_NAMES = {
-    next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path', better: 'Who’s Better?', tenuki: 'Tenuki-able?',
+    next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path', better: 'Who’s Better?', tenuki: 'Tenuki-able?', sente: 'Play for Sente',
 }
 
 const deck = new ReviewDeck()

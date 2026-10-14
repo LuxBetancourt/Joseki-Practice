@@ -1,7 +1,7 @@
 import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import {
-    generateNextMove, generatePunish, generateFinalShape, generatePickPath, generateWhosBetter, generateTenuki,
+    generateNextMove, generatePunish, generateFinalShape, generatePickPath, generateWhosBetter, generateTenuki, generateSente, senteOptionsAt,
     problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup,
 } from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
@@ -20,7 +20,7 @@ const $ = (selector) => document.querySelector(selector)
 
 const DEFAULT_SETTINGS = {
     mode: 'problems', // 'explore' | 'problems' | 'review'
-    problemTypes: { next: true, punish: true, shape: true, path: true, better: true, tenuki: true },
+    problemTypes: { next: true, punish: true, shape: true, path: true, better: true, tenuki: true, sente: true },
     player: 'black',
     ideal: true, good: false, bad: false, trick: false, question: false,
     firstTen: true,
@@ -124,13 +124,15 @@ const stats = { // This session's score per mode
     path: { solved: 0, attempted: 0 },
     better: { solved: 0, attempted: 0 },
     tenuki: { solved: 0, attempted: 0 },
+    sente: { solved: 0, attempted: 0 },
 }
 const GENERATORS = {
     next: generateNextMove, punish: generatePunish, shape: generateFinalShape, path: generatePickPath,
-    better: generateWhosBetter, tenuki: generateTenuki,
+    better: generateWhosBetter, tenuki: generateTenuki, sente: generateSente,
 }
 const PROBLEM_TYPE_NAMES = {
     next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path', better: 'Who’s Better?', tenuki: 'Tenuki-able?',
+    sente: 'Play for Sente',
 }
 // Problems answered with buttons rather than on the board, and the answers they offer
 const ANSWER_CHOICES = {
@@ -156,9 +158,9 @@ function recordFirstAttempt(correct) {
 }
 const problemPending = () => problem && !problem.solved && !problem.revealed
 // Where the player answers: shape problems move along their line as the player plays it out
-const answerIndex = () => problem.index + (problem.kind === 'shape' ? problem.step : 0)
-// Final Shape and Pick the Path follow a fixed sequence, so moving around the game would break them
-const navigationLocked = () => problemPending() && ['shape', 'path', 'better', 'tenuki'].includes(problem.kind)
+const answerIndex = () => problem.index + (['shape', 'sente'].includes(problem.kind) ? problem.step : 0)
+// Final Shape, Play for Sente and Pick the Path follow a fixed sequence, so moving around the game would break them
+const navigationLocked = () => problemPending() && ['shape', 'sente', 'path', 'better', 'tenuki'].includes(problem.kind)
 
 const currentEntry = () => history[current]
 const isHumanTurn = (entry = currentEntry()) => freePlay || entry.position.toPlay === humanColor()
@@ -238,6 +240,7 @@ function playMove(coord, { byHuman }) {
 
 function gradeAnswer(coord) {
     if (problem.kind === 'shape') { return gradeShapeAnswer(coord) }
+    if (problem.kind === 'sente') { return gradeSenteAnswer(coord) }
     const type = problem.answers.get(coord)
     const score = stats[problem.kind]
     if (++problem.attempts === 1) { ++score.attempted }
@@ -344,6 +347,83 @@ async function continueShape() {
     if (gen === generation) { setBusy(false) }
 }
 
+/**
+ * Play for Sente: the player plays out a joseki line that ends with them in sente, one of their
+ * moves at a time, and the computer plays the other side. The first move must start a line that
+ * ends in sente; later ones follow it, or take another joseki move whose own line still does (the
+ * line then follows that move instead). Any wrong move counts as a miss.
+ */
+async function gradeSenteAnswer(coord) {
+    const gen = generation
+    const at = answerIndex()
+    if (++problem.attempts === 1) { ++stats.sente.attempted }
+
+    let option = problem.step === 0
+        ? problem.options.find((o) => o.move === coord)
+        : coord === problem.line[problem.step].move ? { move: coord, sente: true, line: problem.line.slice(problem.step) } : null
+    let type = problem.step === 0 ? problem.answers.get(coord) : null
+    if (problem.step > 0 && !option) {
+        // Another joseki move here may keep sente too
+        try {
+            setBusy(true)
+            await resolveNode(at)
+            type = history[at].node?.children.find((c) => c.move === coord && c.color === humanColor())?.type ?? null
+            if (type === MoveType.IDEAL || type === MoveType.GOOD) {
+                const moves = history.slice(1, at + 1).map((entry) => entry.move.coord)
+                option = (await senteOptionsAt(moves, { getNode })).find((o) => o.move === coord) || null
+            }
+        }
+        catch { /* Couldn't check: treat it as not keeping sente */ }
+        if (gen !== generation) { return }
+    }
+
+    if (!option?.sente) {
+        if (!problem.missed) {
+            problem.missed = true
+            recordFirstAttempt(false)
+        }
+        const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
+        const message = option
+            ? `That’s joseki, but it ends in gote: ${them} gets to play elsewhere.`
+            : moveTypeMessage(type)
+        toast(`${message} Try again.`, 'error')
+        takeBackWrongAnswer()
+        return
+    }
+
+    problem.line = [...(problem.line || []).slice(0, problem.step), ...option.line]
+    problem.step += 1
+    problem.hint = false
+    continueSente()
+}
+
+/** The computer plays the other side along the line, until it's the player's turn or the joseki is over. */
+async function continueSente() {
+    const gen = generation
+    setBusy(true)
+    while (problem.step < problem.line.length && problem.line[problem.step].color !== humanColor()) {
+        await delay(450)
+        if (gen !== generation) { return }
+        const { move, color } = problem.line[problem.step]
+        const entry = currentEntry()
+        pushEntry({ position: entry.position.playSgf(move, color), move: { coord: move, color }, node: undefined, path: entry.path + move })
+        problem.step += 1
+        render()
+    }
+    if (problem.step >= problem.line.length) {
+        problem.solved = true
+        if (!problem.missed) {
+            ++stats.sente.solved
+            recordFirstAttempt(true)
+        }
+        toast(`${problem.missed ? '' : '✓✓ '}The joseki is over, and you have sente.`, 'success')
+        autoAdvanceAfterSolving()
+    }
+    try { await resolveNode(current) } // Load the move info
+    catch { /* The move info will say it couldn't be found */ }
+    if (gen === generation) { setBusy(false) }
+}
+
 /** Shows a wrong answer briefly, then takes it back. */
 function takeBackWrongAnswer() {
     const gen = generation
@@ -372,9 +452,9 @@ function autoAdvanceAfterSolving() {
 
 function revealAnswer() {
     if (!problemPending()) { return }
-    if (problem.kind === 'shape') {
+    if (problem.kind === 'shape' || problem.kind === 'sente') {
         // A hint: highlight the player's next move, and let them carry on playing it out
-        if (problem.attempts === 0) { ++stats.shape.attempted }
+        if (problem.attempts === 0) { ++stats[problem.kind].attempted }
         if (!problem.missed) {
             problem.missed = true
             recordFirstAttempt(false)
@@ -403,6 +483,11 @@ const problemPrompt = () => {
     }
     if (problem.kind === 'path') { return 'Which sequence is joseki, with both sides playing joseki moves from here?' }
     if (problem.kind === 'better') { return 'Who’s better in this position?' }
+    if (problem.kind === 'sente') {
+        if (!problem.step) { return `${you} to play. Play out a joseki that ends with you in sente; the computer plays the other side.` }
+        const left = problem.line.slice(problem.step).filter((m) => m.color === humanColor()).length
+        return `Keep going: ${left} more move${left === 1 ? '' : 's'}, ending in sente.`
+    }
     if (problem.kind === 'tenuki') {
         const side = capitalize(colorName(problem.spec.color))
         return `It’s ${side}’s turn. Can ${side} tenuki here?`
@@ -760,6 +845,12 @@ function render() {
     let highlights = []
     if (problem?.kind === 'shape' && problem.hint && current === answerIndex()) {
         highlights = [toHighlight(problem.line[problem.step].move, MoveType.IDEAL)]
+    }
+    else if (problem?.kind === 'sente' && problem.hint && current === answerIndex()) {
+        // The first move: those that keep sente, and the joseki moves that end in gote; then the line's next move
+        highlights = problem.step
+            ? [toHighlight(problem.line[problem.step].move, MoveType.IDEAL)]
+            : problem.options.map((o) => toHighlight(o.move, o.sente ? MoveType.IDEAL : MoveType.BAD))
     }
     else if (problem?.revealed && current === problem.index) {
         if (problem.inferredFrom) {
@@ -1207,7 +1298,7 @@ function renderProblemBar() {
     else if (problem?.solved) {
         prompt = settings.autoAdvance
             ? 'Solved! Next problem coming up…'
-            : { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.', better: 'Correct!', tenuki: 'Correct!' }[problem.kind]
+            : { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.', better: 'Correct!', tenuki: 'Correct!', sente: 'Solved! You end in sente.' }[problem.kind]
                 || 'Solved! Keep playing, or get a new problem.'
     }
     else if (problem?.revealed) { prompt = ANSWER_CHOICES[problem.kind] ? 'The answer is marked below.' : 'Answers are highlighted.' }
