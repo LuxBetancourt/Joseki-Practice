@@ -79,6 +79,14 @@ const saveList = (key, list) => {
 }
 let recentKinds = loadList('recentKinds')
 let seenProblems = new Set(loadList('seenProblems'))
+// How many times each problem type's banner has been shown, so it can get quicker (see showTypeBanner)
+const bannerViews = (() => {
+    try {
+        const saved = JSON.parse(localStorage.getItem('bannerViews'))
+        return saved && typeof saved === 'object' ? saved : {}
+    }
+    catch { return {} }
+})()
 
 function noteShown(kind, moves) {
     recentKinds = addRecentKind(recentKinds, kind)
@@ -937,9 +945,22 @@ function render() {
 
 // --- Problem type banner ----------------------------------------------------------
 // Each new problem is introduced by a banner with its type and goal that sweeps across the board.
+// It gets a little quicker each time a type's banner is seen, up to twice as fast.
+
+const BANNER_TIME = 1700 // ms, the first time
+const BANNER_SPEEDUP = 0.05 // Faster per viewing, so twice as fast after 20
+const MAX_BANNER_SPEED = 2
+
+/** How long a type's banner takes after it has been seen `views` times. */
+const bannerTime = (views) => Math.round(BANNER_TIME / Math.min(MAX_BANNER_SPEED, 1 + BANNER_SPEEDUP * views))
 
 function showTypeBanner(kind, review) {
     const banner = $('#type-banner')
+    const views = Number.isInteger(bannerViews[kind]) ? bannerViews[kind] : 0
+    banner.style.setProperty('--banner-time', `${bannerTime(views)}ms`)
+    bannerViews[kind] = views + 1
+    try { localStorage.setItem('bannerViews', JSON.stringify(bannerViews)) }
+    catch { /* storage unavailable: it just won't speed up next visit */ }
     banner.dataset.kind = kind
     banner.querySelector('.type-banner-name').textContent = PROBLEM_TYPE_NAMES[kind]
     banner.querySelector('.type-banner-goal').textContent = review ? `Review · ${PROBLEM_TYPE_GOALS[kind]}` : PROBLEM_TYPE_GOALS[kind]

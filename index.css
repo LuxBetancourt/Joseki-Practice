@@ -815,7 +815,8 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     pointer-events: none; /* Never in the way of playing */
     visibility: hidden;
 }
-#type-banner.play { visibility: visible; animation: banner-hide 1.7s step-end forwards; }
+/* --banner-time: 1.7s at first, shortened by showTypeBanner as the player gets used to each type */
+#type-banner.play { visibility: visible; animation: banner-hide var(--banner-time, 1.7s) step-end forwards; }
 .type-banner-band {
     width: 100%;
     display: flex;
@@ -828,7 +829,7 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
     box-shadow: 0 8px 30px rgba(0, 0, 0, .45);
     transform: translateX(-120%) skewX(-14deg);
 }
-#type-banner.play .type-banner-band { animation: banner-sweep 1.7s linear forwards; }
+#type-banner.play .type-banner-band { animation: banner-sweep var(--banner-time, 1.7s) linear forwards; }
 .type-banner-name {
     font-size: clamp(1.6rem, 6vw, 2.8rem);
     font-weight: 800;
@@ -839,8 +840,8 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 }
 .type-banner-goal { font-size: clamp(.9rem, 2.5vw, 1.15rem); font-weight: 600; opacity: .9; text-align: center; }
 /* The text follows the band in from the left and leaves to the right, each at its own pace */
-#type-banner.play .type-banner-name { animation: banner-name 1.7s linear forwards; }
-#type-banner.play .type-banner-goal { animation: banner-goal 1.7s linear forwards; }
+#type-banner.play .type-banner-name { animation: banner-name var(--banner-time, 1.7s) linear forwards; }
+#type-banner.play .type-banner-goal { animation: banner-goal var(--banner-time, 1.7s) linear forwards; }
 /* Fast in, a slow drift through the middle rather than a stop, then fast out: each easing meets
    the drift at about its speed, so the motion never jerks */
 @keyframes banner-sweep {
@@ -864,7 +865,7 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 @keyframes banner-hide { to { visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) {
     .type-banner-band { transform: none; }
-    #type-banner.play .type-banner-band { animation: banner-fade 1.4s ease forwards; }
+    #type-banner.play .type-banner-band { animation: banner-fade var(--banner-time, 1.7s) ease forwards; }
     #type-banner.play .type-banner-name, #type-banner.play .type-banner-goal { animation: none; }
     @keyframes banner-fade { 0% { opacity: 0; } 15%, 75% { opacity: 1; } 100% { opacity: 0; } }
 }
