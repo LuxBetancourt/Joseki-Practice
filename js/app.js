@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
     showFollowUps: false,
     autoAdvance: false, // Go to the next problem automatically after solving one
     shapeBothSides: false, // In Final Shape, the player plays the other side's moves too
+    replaySetup: false, // Play each problem's moves out from an empty board before it starts
     expanded: [], // Starting-point branches the player has expanded
     start: 'empty',
 }
@@ -175,19 +176,20 @@ const problemPending = () => problem && !problem.solved && !problem.revealed
 // Where the player answers: shape problems move along their line as the player plays it out
 const answerIndex = () => problem.index + (['shape', 'sente'].includes(problem.kind) ? problem.step : 0)
 // Final Shape, Play for Sente and Pick the Path follow a fixed sequence, so moving around the game would break them
-const navigationLocked = () => problemPending() && ['shape', 'sente', 'path', 'better', 'tenuki'].includes(problem.kind)
+const navigationLocked = () => replaying() || (problemPending() && ['shape', 'sente', 'path', 'better', 'tenuki'].includes(problem.kind))
 
 const currentEntry = () => history[current]
 // A Final Shape problem being played out with both sides by the player (see settings.shapeBothSides)
 const playingBothSides = () => Boolean(problem?.bothSides && problemPending())
 const isHumanTurn = (entry = currentEntry()) => freePlay || playingBothSides() || entry.position.toPlay === humanColor()
 // Path problems are answered by picking a sequence, not by playing on the board
-const canPlayOnBoard = () => !busy && isHumanTurn() && !(problemPending() && ['path', 'better', 'tenuki'].includes(problem.kind))
+const canPlayOnBoard = () => !busy && !replaying() && isHumanTurn() && !(problemPending() && ['path', 'better', 'tenuki'].includes(problem.kind))
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const view = new BoardView($('#board'), {
     onPlay: (x, y) => {
+        if (replaying()) { return finishReplay() } // A click skips to the problem
         if (ladderStoneAt(x, y)) { return } // Not part of the game, just there to decide the ladder
         if (answeredOnBoard()) {
             // Who's Better?: a side's stone picks that side, an empty point picks even
@@ -637,6 +639,42 @@ function presentProblem(found, kind, { reviewKey = null, color = humanColor(), l
     noteShown(kind, found.moves) // Reviews and links count too: they're practice of that type all the same
     showTypeBanner(kind, Boolean(reviewKey))
     ++generation
+    // Pick the Path shows cards rather than the board, so there's nothing to play out
+    if (settings.replaySetup && found.moves.length && kind !== 'path') { replayMoves() }
+    else { advance() }
+}
+
+// --- Playing out a problem's moves ------------------------------------------------
+// With settings.replaySetup on, a new problem starts from an empty board and its moves are played
+// one at a time; clicking the board skips to the problem.
+
+const REPLAY_STEP = 280 // ms per move
+let replay = null // The replay in progress, if any
+const replaying = () => Boolean(replay && replay.problem === problem)
+
+async function replayMoves() {
+    const mine = { problem }
+    replay = mine
+    current = 0
+    render()
+    const stopped = () => replay !== mine || problem !== mine.problem // Skipped, or a new problem
+    for (let i = 1; i <= mine.problem.index; ++i) {
+        await delay(REPLAY_STEP)
+        try { await resolveNode(i) } // For the move info as it goes
+        catch { /* The move info will say it couldn't be found */ }
+        if (stopped()) { return }
+        current = i
+        render()
+    }
+    finishReplay()
+}
+
+/** Ends the replay (or skips the rest of it): on to the problem position, ready to answer. */
+function finishReplay() {
+    if (!replaying()) { return }
+    replay = null
+    current = problem.index
+    ++generation
     advance()
 }
 
@@ -930,7 +968,7 @@ function render() {
     const findingProblem = busy && !problem && settings.mode !== 'explore'
     $('#status .spinner').hidden = !busy || showingWrongAnswer
     $('#board-loading').hidden = !findingProblem // Finding a problem can take a few seconds
-    $('#status-text').textContent = showingWrongAnswer ? '' : busy
+    $('#status-text').textContent = showingWrongAnswer ? '' : replaying() ? 'Playing the moves… click the board to skip' : busy
         ? (problem || settings.mode === 'explore' ? (isHumanTurn() ? 'Loading…' : 'Thinking…') : 'Finding a problem…')
         : problemPending() && problem.kind === 'path' ? 'Choose a sequence below'
         : answeredOnBoard() ? 'Click the board, or choose below'
