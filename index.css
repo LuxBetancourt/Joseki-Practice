@@ -783,3 +783,76 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 #move-sources h3 { margin: 0 0 .3rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 #move-sources ul { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
 #move-comment cite { font-style: italic; }
+
+/* --- Problem types: a color each, and the banner that introduces each problem --- */
+
+[data-kind] { --kind: var(--accent); --kind-text: white; }
+[data-kind="next"] { --kind: #1f9e89; }
+[data-kind="punish"] { --kind: #d1495b; }
+[data-kind="shape"] { --kind: #3a7bd5; }
+[data-kind="path"] { --kind: #8e5bd6; }
+[data-kind="better"] { --kind: #e07a26; --kind-text: #1b1a18; }
+[data-kind="tenuki"] { --kind: #d65db1; }
+[data-kind="sente"] { --kind: #d4af37; --kind-text: #1b1a18; }
+
+#board-area[data-kind] #problem-kind { background: var(--kind); border-color: var(--kind); color: var(--kind-text); font-weight: 700; }
+#board-area[data-kind] #problem-bar { border-left: 5px solid var(--kind); }
+#board-area[data-kind] #board { outline: 3px solid var(--kind); outline-offset: 2px; } /* Outside the board, where wood-like colors still show */
+#board-area[data-kind] #board-wrap.view-only #board,
+#board-area[data-kind] #board-wrap.answer-on-board #board { outline-color: var(--kind); outline-offset: 2px; }
+#board-area[data-kind] #answer-choices { border-color: var(--kind); }
+#board-area[data-kind] #board-wrap.view-only #answer-hint,
+#board-area[data-kind] #board-wrap.answer-on-board #answer-hint { background: var(--kind); color: var(--kind-text); }
+
+#type-banner {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    pointer-events: none; /* Never in the way of playing */
+    visibility: hidden;
+}
+#type-banner.play { visibility: visible; animation: banner-hide 1.7s step-end forwards; }
+.type-banner-band {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .15rem;
+    padding: 1rem 1.5rem;
+    background: var(--kind);
+    color: var(--kind-text);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .45);
+    transform: translateX(-120%) skewX(-14deg);
+}
+#type-banner.play .type-banner-band { animation: banner-sweep 1.7s cubic-bezier(.2, .8, .2, 1) forwards; }
+.type-banner-name {
+    font-size: clamp(1.6rem, 6vw, 2.8rem);
+    font-weight: 800;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    line-height: 1.1;
+    text-align: center;
+}
+.type-banner-goal { font-size: clamp(.9rem, 2.5vw, 1.15rem); font-weight: 600; opacity: .9; text-align: center; }
+#type-banner.play .type-banner-name { animation: banner-name 1.7s ease-out forwards; }
+@keyframes banner-sweep {
+    0% { transform: translateX(-120%) skewX(-14deg); }
+    22% { transform: translateX(0) skewX(-14deg); }
+    78% { transform: translateX(0) skewX(-14deg); }
+    100% { transform: translateX(120%) skewX(-14deg); }
+}
+@keyframes banner-name {
+    0%, 12% { letter-spacing: .6em; opacity: 0; }
+    35% { letter-spacing: .02em; opacity: 1; }
+    100% { letter-spacing: .02em; opacity: 1; }
+}
+@keyframes banner-hide { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) {
+    .type-banner-band { transform: none; }
+    #type-banner.play .type-banner-band { animation: banner-fade 1.4s ease forwards; }
+    #type-banner.play .type-banner-name { animation: none; }
+    @keyframes banner-fade { 0% { opacity: 0; } 15%, 75% { opacity: 1; } 100% { opacity: 0; } }
+}

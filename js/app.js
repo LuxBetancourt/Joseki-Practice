@@ -130,6 +130,12 @@ const GENERATORS = {
     next: generateNextMove, punish: generatePunish, shape: generateFinalShape, path: generatePickPath,
     better: generateWhosBetter, tenuki: generateTenuki, sente: generateSente,
 }
+// Shown on the banner that introduces each problem
+const PROBLEM_TYPE_GOALS = {
+    next: 'Find the joseki move', punish: 'Punish the mistake', shape: 'Play out the faded shape',
+    path: 'Pick the joseki sequence', better: 'Judge the position', tenuki: 'Can you play elsewhere?',
+    sente: 'End the joseki with sente',
+}
 const PROBLEM_TYPE_NAMES = {
     next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path', better: 'Who’s Better?', tenuki: 'Tenuki-able?',
     sente: 'Play for Sente',
@@ -612,6 +618,7 @@ function presentProblem(found, kind, { reviewKey = null, color = humanColor(), l
         ladder, // { color, moves, stone }: a ladder the problem relies on, and the stone that decides it
     }
     noteShown(kind, found.moves) // Reviews and links count too: they're practice of that type all the same
+    showTypeBanner(kind, Boolean(reviewKey))
     ++generation
     advance()
 }
@@ -914,6 +921,9 @@ function render() {
         : ['shape', 'path'].includes(problem?.kind) && problem.solved && !isHumanTurn() ? '' // The joseki is complete
             : freePlay || isHumanTurn() ? `${toPlay} to play` : `Computer (${toPlay})`
 
+    // Each problem type has its own color (see [data-kind] in the CSS)
+    if (problem) { $('#board-area').dataset.kind = problem.kind }
+    else { delete $('#board-area').dataset.kind }
     renderProblemBar()
     renderReviewStatus()
     updateUrl(entry)
@@ -923,6 +933,19 @@ function render() {
     renderPathStartMarks()
     renderMoveInfo(entry)
     renderFollowUps(entry)
+}
+
+// --- Problem type banner ----------------------------------------------------------
+// Each new problem is introduced by a banner with its type and goal that sweeps across the board.
+
+function showTypeBanner(kind, review) {
+    const banner = $('#type-banner')
+    banner.dataset.kind = kind
+    banner.querySelector('.type-banner-name').textContent = PROBLEM_TYPE_NAMES[kind]
+    banner.querySelector('.type-banner-goal').textContent = review ? `Review · ${PROBLEM_TYPE_GOALS[kind]}` : PROBLEM_TYPE_GOALS[kind]
+    banner.classList.remove('play')
+    void banner.offsetWidth // Restart the animation
+    banner.classList.add('play')
 }
 
 // --- Ladders ---------------------------------------------------------------------
