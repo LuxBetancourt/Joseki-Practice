@@ -2,7 +2,7 @@ import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, 
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import {
     generateNextMove, generatePunish, generateFinalShape, generatePickPath, generateWhosBetter, generateTenuki,
-    problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem,
+    problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt,
 } from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { orderKinds, addRecentKind, seenKey, addSeen } from './problem-mix.js'
@@ -804,6 +804,7 @@ function render() {
     renderProblemBar()
     renderReviewStatus()
     updateUrl(entry)
+    renderAddReview(entry)
     renderPathChoices()
     renderAnswerChoices()
     renderPathStartMarks()
@@ -1159,6 +1160,72 @@ function renderProblemBar() {
 }
 
 /** The Review mode label's due count, and the deck summary shown in Review mode. */
+// --- Adding Explore positions to Review ------------------------------------------
+// In Explore, the current position can be saved to Review as any type of problem it fits.
+
+let addMenuFor = null // The position entry the open menu was built for
+
+function renderAddReview(entry) {
+    const button = $('#add-review')
+    button.hidden = settings.mode !== 'explore'
+    // Demo board positions have no joseki data to make problems from
+    button.disabled = busy || freePlay || !entry?.node?.children
+    button.title = freePlay ? 'The demo board has no joseki data to make problems from' : 'Save this position to Review as a problem'
+    if (addMenuFor && (addMenuFor !== entry || button.hidden || button.disabled)) { closeAddMenu() }
+}
+
+function closeAddMenu() {
+    addMenuFor = null
+    $('#add-review-menu').hidden = true
+    $('#add-review').setAttribute('aria-expanded', 'false')
+}
+
+/** Opens the menu of problem types, then checks which ones this position can be. */
+async function openAddMenu() {
+    const entry = currentEntry()
+    addMenuFor = entry
+    const menu = $('#add-review-menu')
+    $('#add-review').setAttribute('aria-expanded', 'true')
+    menu.hidden = false
+    const items = Object.keys(GENERATORS).map((kind) => {
+        const item = document.createElement('button')
+        item.type = 'button'
+        item.disabled = true
+        item.setAttribute('role', 'menuitem')
+        const name = Object.assign(document.createElement('span'), { className: 'menu-name', textContent: PROBLEM_TYPE_NAMES[kind] })
+        const note = Object.assign(document.createElement('span'), { className: 'menu-note', textContent: 'Checking…' })
+        item.append(name, note)
+        return { kind, item, note }
+    })
+    menu.replaceChildren(...items.map(({ item }) => item))
+
+    const moves = splitPath(entry.path)
+    await Promise.all(items.map(async ({ kind, item, note }) => {
+        let result
+        try { result = await problemAt(kind, moves, { color: humanColor(), firstTen: settings.firstTen, getNode }) }
+        catch { result = { why: 'Couldn’t check this position' } }
+        if (addMenuFor !== entry) { return } // Closed, or moved on
+        if (!result.problem) {
+            note.textContent = result.why
+            return
+        }
+        const spec = { kind, moves, color: result.problem.color, data: problemData(kind, result.problem) }
+        if (deck.find(reviewKey(spec))) {
+            note.textContent = 'Already in Review ✓'
+            return
+        }
+        note.textContent = ''
+        item.disabled = false
+        item.addEventListener('click', () => {
+            deck.add(spec)
+            closeAddMenu()
+            toast(`Added to Review as a ${PROBLEM_TYPE_NAMES[kind]} problem.`, 'success')
+            render()
+        })
+    }))
+    menu.querySelector('button:not(:disabled)')?.focus()
+}
+
 function renderReviewStatus() {
     const dueCount = deck.due().length
     // A dot on the Review mode button when problems are due; the count is in its tooltip and for screen readers
@@ -1461,6 +1528,16 @@ function bindControls() {
         })
     }
     $('#copy-link').addEventListener('click', copyLink)
+    $('#add-review').addEventListener('click', () => (addMenuFor ? closeAddMenu() : openAddMenu()))
+    document.addEventListener('click', (event) => {
+        if (addMenuFor && !event.target.closest('#add-review, #add-review-menu')) { closeAddMenu() }
+    })
+    document.addEventListener('keydown', (event) => {
+        if (addMenuFor && event.key === 'Escape') {
+            closeAddMenu()
+            $('#add-review').focus()
+        }
+    })
     $('#show-answer').addEventListener('click', revealAnswer)
     $('#next-problem').addEventListener('click', () => newProblem())
     // Reviews become due over time, so keep the counts fresh

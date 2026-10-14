@@ -484,6 +484,79 @@ async function findTenuki(want, { startMoves, color, firstTen, getNode, random =
     return takeSpare('tenuki', want, startMoves, color)
 }
 
+// --- A problem from a chosen position ---------------------------------------------
+// For saving an Explore position to Review: the given type of problem at exactly this position,
+// held to the same standards as the generators.
+
+/**
+ * The `kind` of problem at the position after `moves`, for the side to play (or `color`, for
+ * Who's Better?, which doesn't depend on whose turn it is). Returns { problem } in the shape the
+ * generators return (with its color), or { why } saying why this position can't be one.
+ */
+export async function problemAt(kind, moves, { color, firstTen = false, getNode, random = Math.random }) {
+    const state = await replay(moves, getNode)
+    const { node, position } = state
+    const toPlay = position.toPlay
+    const side = toPlay === BLACK ? 'Black' : 'White'
+    const answers = answerTypes(node, toPlay)
+    const hasAnswer = (types) => node.children.some((child) => child.color === toPlay && child.move !== PASS && types.includes(child.type))
+    const none = (why) => ({ why })
+
+    switch (kind) {
+        case 'next':
+            if (!hasAnswer([MoveType.IDEAL, MoveType.GOOD])) { return none(`No joseki move for ${side} here`) }
+            return { problem: { moves, answers, color: toPlay } }
+        case 'punish': {
+            if (!moves.length) { return none('No move to punish yet') }
+            const before = await replay(moves.slice(0, -1), getNode)
+            const last = before.node.children.find((child) => child.move === moves.at(-1) && child.color === before.position.toPlay)
+            if (last.type !== MoveType.BAD && last.type !== MoveType.TRICK) { return none('The last move isn’t a mistake') }
+            if (!hasAnswer([MoveType.IDEAL, MoveType.GOOD])) { return none('Josekipedia doesn’t record how to punish it') }
+            return { problem: { moves, answers, mistake: { move: last.move, type: last.type }, color: toPlay } }
+        }
+        case 'shape': {
+            const choices = josekiMoves(node, position, firstTen)
+            if (choices.length < 2) { return none(`${side} needs a choice of joseki moves here`) }
+            for (const child of choices) {
+                const after = await step(state, child, getNode)
+                const rest = await mainLine({ node: after.node, position: after.position, getNode })
+                const line = [{ move: child.move, color: child.color }, ...rest.moves]
+                if (line.length <= MAX_SHAPE_LINE && line.filter((m) => m.color === toPlay).length >= 2) {
+                    return { problem: { moves, answers, answer: child.move, line, target: rest.position, color: toPlay } }
+                }
+            }
+            return none('The joseki from here is too short or too long')
+        }
+        case 'path': {
+            if (!josekiMoves(node, position, false).length) { return none(`No joseki move for ${side} here`) }
+            const main = await mainLine({ node, position, getNode })
+            if (main.moves.length < MIN_PATH_LINE || main.moves.length > MAX_PATH_LINE) { return none('The joseki from here is too short or too long') }
+            const options = await pathOptions(state, main, { getNode, random })
+            if (!options) { return none('Not enough other sequences from here') }
+            return { problem: { moves, line: main.moves, options, color: toPlay } }
+        }
+        case 'better': {
+            const answer = outcomeOf(node.labels)
+            if (!answer) { return none('Josekipedia doesn’t say who’s better here') }
+            return { problem: { moves, answers: answerTypes(node, color), answer, labels: node.labels, color } }
+        }
+        case 'tenuki': {
+            const answer = tenukiVerdict(node, toPlay)
+            if (answer) { return { problem: { moves, answer, color: toPlay } } }
+            const move = inferredNoMove(node, toPlay)
+            if (move) {
+                const after = await getNode(move.id)
+                const continues = !after.labels.includes(SETTLED_LABEL)
+                    && after.children.some((child) => child.color !== move.color && child.type === MoveType.IDEAL && child.move !== PASS)
+                if (continues) { return { problem: { moves, answer: 'no', color: toPlay, inferredFrom: move.move } } }
+            }
+            return none(`Josekipedia doesn’t say whether ${side} can tenuki here`)
+        }
+        default:
+            return none('Unknown problem type')
+    }
+}
+
 // Problem links: a letter for the kind, one for the color, the moves, then anything that can't be
 // worked out again from Josekipedia, each after a dot. For example "sbpdqfncqcpc.qe" is a Final
 // Shape problem for Black after pd qf nc qc pc, whose answer is qe.

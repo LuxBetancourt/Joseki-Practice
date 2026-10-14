@@ -59,6 +59,16 @@ export class ReviewDeck {
         return item
     }
 
+    /** Adds a problem the player chose to review (due now), unless it's already in the deck. Returns the item or null. */
+    add(spec) {
+        const key = reviewKey(spec)
+        if (this.find(key)) { return null }
+        const item = { key, kind: spec.kind, moves: spec.moves, color: spec.color, data: spec.data, added: this.now(), lapses: 0, step: 0, due: this.now() }
+        this.items.push(item)
+        this.save()
+        return item
+    }
+
     /** A review answered correctly the first time: wait longer before showing it again. */
     recordSuccess(key) {
         const item = this.find(key)
@@ -143,7 +153,7 @@ export function readExport(text) {
         color: item.color,
         data: item.data,
         added: Number.isFinite(item.added) ? item.added : item.due,
-        lapses: Number.isInteger(item.lapses) && item.lapses > 0 ? item.lapses : 1,
+        lapses: Number.isInteger(item.lapses) && item.lapses >= 0 ? item.lapses : 1, // 0: added by the player
         step: Number.isInteger(item.step) ? Math.min(Math.max(item.step, 0), REVIEW_STEPS.length - 1) : 0,
         due: item.due,
     }))

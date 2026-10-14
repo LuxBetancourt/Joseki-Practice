@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares, problemAt } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -377,4 +377,33 @@ test('tenuki-able: only asks about the given color', async () => {
             assert.equal(problem.moves.length % 2, 1, 'White to play')
         }
     }
+})
+
+test('problemAt: a chosen position becomes a problem of the chosen type, or says why not', async () => {
+    const at = (kind, moves, color = BLACK) => problemAt(kind, moves, { color, firstTen: true, getNode })
+    // Next Move: Black to play qd after pd qf nc qc
+    const next = await at('next', ['pd', 'qf', 'nc', 'qc'])
+    assert.equal(next.problem.color, BLACK)
+    assert.equal(next.problem.answers.get('qd'), 0)
+    assert.ok((await at('next', ['pd', 'qf', 'nc', 'qc', 'qd'])).why, 'nothing to play at the end of the line')
+    // Punish: White's rc is a mistake that Black answers with qc
+    const punish = await at('punish', ['pd', 'qf', 'nc', 'rc'])
+    assert.deepEqual(punish.problem.mistake, { move: 'rc', type: 2 })
+    assert.ok((await at('punish', ['pd', 'qf', 'nc', 'qc'])).why, 'qc is joseki, not a mistake')
+    // Who's Better? and Tenuki-able? need Josekipedia to say so
+    assert.ok((await at('better', ['pd', 'qf'])).why)
+    const tenuki = await at('tenuki', ['pd', 'qf', 'nc', 'qc'])
+    assert.ok(tenuki.why || tenuki.problem.answer)
+    // Whatever is made can be saved and rebuilt like any review
+    for (const [kind, { problem }] of [['next', next], ['punish', punish]]) {
+        const rebuilt = await rebuildProblem({ kind, moves: problem.moves, color: problem.color, data: problemData(kind, problem) }, { getNode })
+        assert.deepEqual(rebuilt.moves, problem.moves)
+    }
+})
+
+test("problemAt: who's better reads the verdict on the last move", async () => {
+    const labelled = async (id) => ({ ...(await getNode(id)), labels: id === 42 ? [1] : [] })
+    const { problem } = await problemAt('better', ['pd', 'qf'], { color: WHITE, getNode: labelled })
+    assert.equal(problem.answer, 'white')
+    assert.equal(problem.color, WHITE, 'saved for the player, whoever is to move')
 })

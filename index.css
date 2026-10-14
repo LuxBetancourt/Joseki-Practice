@@ -694,3 +694,40 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 .stone-icon.black { background: radial-gradient(circle at 35% 35%, #555, #111 70%); }
 .stone-icon.white { background: radial-gradient(circle at 35% 35%, #fff, #ccc 80%); }
 #board-wrap.view-only #answer-hint.question { font-size: 1.05rem; padding: .3em 1.1em; }
+
+/* Explore: Add to Review, a menu of the problem types this position can be saved as */
+#add-review-wrap { position: relative; }
+#add-review[hidden] { display: none; }
+#add-review-menu {
+    position: absolute;
+    top: calc(100% + .3rem);
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    width: max-content;
+    max-width: min(22rem, 90vw);
+    padding: .3rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .3);
+}
+#add-review-menu[hidden] { display: none; }
+#add-review-menu button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .1rem;
+    border: none;
+    background: none;
+    text-align: left;
+    padding: .45rem .7rem;
+    border-radius: 5px;
+}
+#add-review-menu button:not(:disabled):hover, #add-review-menu button:focus-visible { background: var(--button-hover); }
+#add-review-menu button:disabled { opacity: 1; cursor: default; }
+#add-review-menu button:disabled .menu-name { color: var(--muted); }
+.menu-name { font-weight: 600; }
+.menu-note { font-size: .8rem; color: var(--muted); }
+.menu-note:empty { display: none; }

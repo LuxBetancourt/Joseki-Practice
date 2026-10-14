@@ -63,7 +63,7 @@ function card(item, now) {
     const lines = [
         `Play as ${capitalize(colorName(item.color))}`,
         item.due <= now ? 'Due now' : `Due ${relativeTime(item.due, now)}`,
-        `Missed ${item.lapses} time${item.lapses === 1 ? '' : 's'}`,
+        item.lapses ? `Missed ${item.lapses} time${item.lapses === 1 ? '' : 's'}` : 'Added from Explore',
     ]
     details.append(...lines.flatMap((line, i) => (i ? [document.createElement('br'), line] : [line])))
 
