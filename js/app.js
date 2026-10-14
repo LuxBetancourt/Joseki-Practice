@@ -872,7 +872,7 @@ function renderLadderNote() {
     let text = `${list} ${moves.length > 1 ? 'need' : 'needs'} a favorable ladder.`
     if (ladder.stone) {
         const side = colorName(ladder.color)
-        text += ` The ${side} stone at ${sgfToDisplay(toSgf(ladder.stone.x, ladder.stone.y))} stands in for one: it sits where the ladder would run, so it works for ${capitalize(side)}.`
+        text += ` The ${side} stone at ${sgfToDisplay(toSgf(ladder.stone.x, ladder.stone.y))} stands in for one.`
     }
     note.textContent = text
 }
