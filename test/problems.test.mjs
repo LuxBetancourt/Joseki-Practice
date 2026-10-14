@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares, problemAt } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares, problemAt, ladderMoves as findLadderMoves, ladderStonePoint, ladderSetup } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -406,4 +406,30 @@ test("problemAt: who's better reads the verdict on the last move", async () => {
     const { problem } = await problemAt('better', ['pd', 'qf'], { color: WHITE, getNode: labelled })
     assert.equal(problem.answer, 'white')
     assert.equal(problem.color, WHITE, 'saved for the player, whoever is to move')
+})
+
+test('ladders: finds the moves a problem relies on that need a favorable ladder', async () => {
+    // White's qc (node 44) needs a ladder; so does Black's answer qd
+    const ladderTree = (id) => getNode(id).then((node) => ({
+        ...node,
+        children: node.children.map((c) => ({ ...c, labels: (id === 43 && c.move === 'qc') ? [5] : (id === 44 && c.move === 'qd') ? [6] : [] })),
+    }))
+    const moves = ['pd', 'qf', 'nc', 'qc']
+    const ladderMoves = async (...args) => (await findLadderMoves(...args)).map(({ move, color }) => ({ move, color }))
+    assert.deepEqual(await ladderMoves('next', { moves }, { getNode: ladderTree }),
+        [{ move: 'qc', color: WHITE }, { move: 'qd', color: BLACK }], 'in the moves played, and the answer')
+    assert.deepEqual(await ladderMoves('better', { moves }, { getNode: ladderTree }), [{ move: 'qc', color: WHITE }], 'answers only count where there are answers')
+    assert.deepEqual(await ladderMoves('shape', { moves: ['pd', 'qf', 'nc'], line: [{ move: 'qc', color: WHITE }, { move: 'qd', color: BLACK }] }, { getNode: ladderTree }),
+        [{ move: 'qc', color: WHITE }, { move: 'qd', color: BLACK }], 'along the line')
+    assert.deepEqual(await ladderMoves('next', { moves }, { getNode }), [], 'none without the labels')
+})
+
+test('ladders: the stone goes in the opposite corner, clear of other stones', async () => {
+    const { Position } = await import('../js/go.js')
+    const empty = new Position()
+    assert.deepEqual(ladderStonePoint(empty, 'qd'), { x: 3, y: 15 }, 'top right: bottom left 4-4')
+    assert.deepEqual(ladderStonePoint(empty, 'dp'), { x: 15, y: 3 }, 'bottom left: top right 4-4')
+    const crowded = empty.playSgf('dp', BLACK) // The bottom-left 4-4 is taken
+    const point = ladderStonePoint(crowded, 'qd')
+    assert.ok(!point || Math.abs(point.x - 3) + Math.abs(point.y - 15) > 0, 'not on or next to the stone there')
 })

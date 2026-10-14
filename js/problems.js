@@ -5,6 +5,7 @@ import { Position, PASS, SIZE, EMPTY, BLACK, WHITE, fromSgf, toSgf, opponent } f
 import { ROOT_ID, MoveType, TENUKI_LABEL } from './josekipedia.js'
 import { CLASSIC_OPENINGS } from './starting-points.js'
 import { mainLine } from './lines.js'
+import { findLadder, ladderStoneOnPath } from './ladder.js'
 
 const MAX_TARGET_DEPTH = 12
 const MAX_DEPTH = 30
@@ -482,6 +483,158 @@ async function findTenuki(want, { startMoves, color, firstTen, getNode, random =
         }
     }
     return takeSpare('tenuki', want, startMoves, color)
+}
+
+// --- Ladders ----------------------------------------------------------------------
+// Some joseki moves only work if a ladder favors the side playing them, which depends on the rest
+// of the board. A problem that relies on one puts a stone of that color in the opposite corner,
+// where a ladder from the joseki would run into it, so the answer isn't left to chance.
+
+const LADDER_LABELS = [5, 6] // "This requires a favorable ladder", "% requires a favorable ladder"
+export const needsLadder = (labels) => labels.some((label) => LADDER_LABELS.includes(label))
+
+/**
+ * The moves a problem relies on that need a favorable ladder for the side playing them: in the
+ * moves leading to the position, its answers (Next Move, Punish) and its joseki line (Final
+ * Shape, Pick the Path). Returns [{ move, color, id, after }]: its node, and the position once played.
+ */
+export async function ladderMoves(kind, problem, { getNode }) {
+    const found = []
+    const follow = async (node, position, line) => {
+        for (const { move } of line) {
+            const child = node.children.find((c) => c.move === move && c.color === position.toPlay)
+            if (!child) { return { node, position } }
+            const after = position.playSgf(child.move, child.color)
+            if (needsLadder(child.labels)) { found.push({ move: child.move, color: child.color, id: child.id, after }) }
+            position = after
+            node = await getNode(child.id)
+        }
+        return { node, position }
+    }
+    const { node, position } = await follow(await getNode(ROOT_ID), new Position(), problem.moves.map((move) => ({ move })))
+
+    if (kind === 'next' || kind === 'punish') {
+        const answers = node.children.filter((child) => child.color === position.toPlay && child.move !== PASS
+            && (child.type === MoveType.IDEAL || child.type === MoveType.GOOD))
+        found.push(...answers.filter((child) => needsLadder(child.labels))
+            .map(({ move, color, id }) => ({ move, color, id, after: position.playSgf(move, color) })))
+    }
+    if ((kind === 'shape' || kind === 'path') && problem.line) {
+        await follow(node, position, problem.line)
+    }
+    return found
+}
+
+const LADDER_SEARCH_NODES = 25 // Nodes looked up, at most, following the joseki on from a ladder move
+const LADDER_SEARCH_DEPTH = 5
+
+/**
+ * Positions from the sequences a node's comment links to, where Josekipedia often shows the
+ * ladder. Returns [{ position, x, y }], each position just after the move at (x, y).
+ */
+function linkedPositions(node) {
+    const found = []
+    for (const [, path] of (node.comment || '').matchAll(/\[path:((?:[a-t]{2})+)\]/g)) {
+        let position = new Position()
+        try {
+            for (const move of path.match(/../g)) {
+                position = position.playSgf(move)
+                const point = fromSgf(move)
+                if (point) { found.push({ position, x: point.x, y: point.y }) }
+            }
+        }
+        catch { /* An illegal sequence: keep what came before */ }
+    }
+    return found
+}
+
+/**
+ * Positions from how the joseki continues a few moves after a ladder move (any move type, since
+ * the resistance the ladder answers is often recorded as a mistake). Same shape as linkedPositions.
+ */
+async function continuationPositions(node, after, getNode) {
+    const found = []
+    let level = [{ node, position: after }]
+    let looked = 0
+    for (let depth = 0; depth < LADDER_SEARCH_DEPTH && level.length; ++depth) {
+        const next = []
+        for (const { node: from, position } of level) {
+            for (const child of from.children) {
+                const point = fromSgf(child.move)
+                if (!point || !position.isLegal(point.x, point.y, child.color)) { continue }
+                const played = position.play(point.x, point.y, child.color)
+                found.push({ position: played, x: point.x, y: point.y })
+                if (looked < LADDER_SEARCH_NODES && depth < LADDER_SEARCH_DEPTH - 1) {
+                    ++looked
+                    next.push({ node: await getNode(child.id), position: played })
+                }
+            }
+        }
+        level = next
+    }
+    return found
+}
+
+/**
+ * How a problem shows the ladder it relies on: a stone of the favored color on the ladder's path
+ * (see ladder.js), or in the opposite corner if the ladder can't be read. Returns
+ * { color, moves: [{ move, color }], stone: { x, y, color } | null } or null if there's no ladder.
+ * The stone is left out if the problem relies on ladders for both sides.
+ */
+export async function ladderSetup(kind, problem, position, { getNode }) {
+    const moves = await ladderMoves(kind, problem, { getNode })
+    if (!moves.length) { return null }
+    const colors = new Set(moves.map((m) => m.color))
+    const color = colors.size === 1 ? moves[0].color : null
+    let point = null
+    if (color) {
+        // Points the problem's own sequences will use are no place for it
+        const used = new Set((problem.line || []).map((m) => m.move))
+        const usable = (p) => p && position.at(p.x, p.y) === EMPTY && !used.has(toSgf(p.x, p.y))
+        // Read the ladder where the comments show it first, and only then search the continuations
+        const onPath = (m, more) => {
+            const { x, y } = fromSgf(m.move)
+            const ladder = findLadder(m.after, x, y, more)
+            const stone = ladder && ladderStoneOnPath(ladder, color)
+            return usable(stone) ? stone : null
+        }
+        for (const m of moves) {
+            const node = await getNode(m.id)
+            point = onPath(m, linkedPositions(node)) || onPath(m, await continuationPositions(node, m.after, getNode))
+            if (point) { break }
+        }
+        if (!point) {
+            const corner = ladderStonePoint(position, moves[0].move)
+            if (usable(corner)) { point = corner }
+        }
+    }
+    return { color, moves: moves.map(({ move, color: c }) => ({ move, color: c })), stone: point && { ...point, color } }
+}
+
+/**
+ * Where to put a stone that makes a ladder from `move` work for its color: the 4-4 point of the
+ * corner diagonally opposite (or a nearby point there), on empty board away from other stones.
+ * Returns { x, y } or null if that corner is too crowded.
+ */
+export function ladderStonePoint(position, move) {
+    const { x, y } = fromSgf(move)
+    const far = (v) => (v >= (SIZE - 1) / 2 ? 0 : SIZE - 1) // The far edge's line, 0 or 18
+    const inward = (edge, steps) => (edge === 0 ? steps : SIZE - 1 - steps)
+    const ex = far(x)
+    const ey = far(y)
+    const candidates = [[3, 3], [2, 3], [3, 2], [4, 4], [2, 2]]
+    for (const [dx, dy] of candidates) {
+        const px = inward(ex, dx)
+        const py = inward(ey, dy)
+        let clear = true
+        for (let yy = py - 2; yy <= py + 2 && clear; ++yy) {
+            for (let xx = px - 2; xx <= px + 2 && clear; ++xx) {
+                if (xx >= 0 && yy >= 0 && xx < SIZE && yy < SIZE && position.at(xx, yy) !== EMPTY) { clear = false }
+            }
+        }
+        if (clear) { return { x: px, y: py } }
+    }
+    return null
 }
 
 // --- A problem from a chosen position ---------------------------------------------

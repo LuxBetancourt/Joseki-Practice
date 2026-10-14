@@ -2,7 +2,7 @@ import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, 
 import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import {
     generateNextMove, generatePunish, generateFinalShape, generatePickPath, generateWhosBetter, generateTenuki,
-    problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt,
+    problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup,
 } from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { orderKinds, addRecentKind, seenKey, addSeen } from './problem-mix.js'
@@ -168,6 +168,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const view = new BoardView($('#board'), {
     onPlay: (x, y) => {
+        if (ladderStoneAt(x, y)) { return } // Not part of the game, just there to decide the ladder
         if (answeredOnBoard()) {
             // Who's Better?: a side's stone picks that side, an empty point picks even
             const color = currentEntry().position.at(x, y)
@@ -487,7 +488,9 @@ async function newProblem() {
             toast(`Couldn’t find a ${which} problem from this starting point.${suggestion}`, 'warning', { label: 'Try Again', action: () => newProblem() })
             return
         }
-        presentProblem(found, kind, { reviewKey, color: reviewColor || found.color || humanColor() })
+        const ladder = await findLadderSetup(found, kind)
+        if (gen !== generation) { return }
+        presentProblem(found, kind, { reviewKey, color: reviewColor || found.color || humanColor(), ladder })
     }
     catch (error) {
         if (gen !== generation) { return }
@@ -498,13 +501,29 @@ async function newProblem() {
 }
 
 /** Puts a generated or rebuilt problem on the board. */
-function presentProblem(found, kind, { reviewKey = null, color = humanColor(), link } = {}) {
+/**
+ * How the problem shows a ladder it relies on (see ladderSetup), or null. Never fails: without
+ * it, the problem still works, just without the ladder stone.
+ */
+async function findLadderSetup(found, kind) {
+    try {
+        const position = found.moves.reduce((p, move) => p.playSgf(move), new Position())
+        return await ladderSetup(kind, found, position, { getNode })
+    }
+    catch (error) {
+        console.warn('Couldn’t work out the ladder', error)
+        return null
+    }
+}
+
+function presentProblem(found, kind, { reviewKey = null, color = humanColor(), link, ladder = null } = {}) {
     setupPosition(found.moves)
     problem = {
         ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [], step: 0, missed: false, hint: false,
         spec: { kind, moves: found.moves, color, data: problemData(kind, found) },
         reviewKey,
         link, // Opened from a link: keep it, as rebuilding can reorder Pick the Path's sequences
+        ladder, // { color, moves, stone }: a ladder the problem relies on, and the stone that decides it
     }
     noteShown(kind, found.moves) // Reviews and links count too: they're practice of that type all the same
     ++generation
@@ -774,7 +793,9 @@ function render() {
         marks: currentMarks(),
         target,
         fadeStones: answeredOnBoard(),
+        ...ladderDrawing(position),
     })
+    renderLadderNote()
 
     // Pick the Path shows only the sequences, not the board
     const pathProblem = problem?.kind === 'path' && current >= problem.index
@@ -810,6 +831,50 @@ function render() {
     renderPathStartMarks()
     renderMoveInfo(entry)
     renderFollowUps(entry)
+}
+
+// --- Ladders ---------------------------------------------------------------------
+// A problem that relies on a favorable ladder has a stone of that color where the ladder would
+// run (see ladderSetup), drawn on the board but not part of the game. After answering, the moves
+// that need the ladder are badged, and a note explains.
+
+const ladderStoneAt = (x, y) => {
+    const stone = problem?.ladder?.stone
+    return Boolean(stone && stone.x === x && stone.y === y)
+}
+
+/** The ladder stone and badges for the board, as BoardView state. */
+function ladderDrawing(position) {
+    const ladder = problem?.ladder
+    if (!ladder) { return { extraStones: [], badges: [] } }
+    const answered = !problemPending()
+    const side = ladder.color && capitalize(colorName(ladder.color))
+    const extraStones = ladder.stone
+        ? [{ ...ladder.stone, title: answered ? `Stands in for a ladder that favors ${side}` : '' }]
+        : []
+    const badges = answered
+        ? ladder.moves.map(({ move, color }) => ({ ...fromSgf(move), color }))
+            .filter(({ x, y, color }) => position.at(x, y) === color)
+            .map(({ x, y }) => ({ x, y, text: 'L', title: 'Needs a favorable ladder' }))
+        : []
+    return { extraStones, badges }
+}
+
+/** After answering, says which moves need a favorable ladder, and what the extra stone is for. */
+function renderLadderNote() {
+    const note = $('#ladder-note')
+    const ladder = problem?.ladder
+    note.hidden = !ladder || problemPending()
+    if (note.hidden) { return }
+    const moves = [...new Map(ladder.moves.map((m) => [m.move, m])).values()]
+        .map(({ move, color }) => `${capitalize(colorName(color))}’s ${sgfToDisplay(move)}`)
+    const list = moves.length > 1 ? `${moves.slice(0, -1).join(', ')} and ${moves.at(-1)}` : moves[0]
+    let text = `${list} ${moves.length > 1 ? 'need' : 'needs'} a favorable ladder.`
+    if (ladder.stone) {
+        const side = colorName(ladder.color)
+        text += ` The ${side} stone at ${sgfToDisplay(toSgf(ladder.stone.x, ladder.stone.y))} stands in for one: it sits where the ladder would run, so it works for ${capitalize(side)}.`
+    }
+    note.textContent = text
 }
 
 // --- Answer buttons (Who's Better?, Tenuki-able?) ------------------------------------
@@ -976,6 +1041,8 @@ function pathStartCard(region) {
     card.append(renderShape(entry.position, { region, rings: lastMove ? [{ ...lastMove, type: 'last' }] : [], label: 'Starting position' }))
     const caption = document.createElement('figcaption')
     caption.textContent = `Starting position · ${capitalize(colorName(entry.position.toPlay))} to play`
+    // The board, with its ladder stone, is hidden here, so say it
+    if (problem.ladder?.color) { caption.textContent += ` · The ladder favors ${capitalize(colorName(problem.ladder.color))}` }
     card.append(caption)
     return card
 }
@@ -1683,8 +1750,9 @@ async function loadSharedProblem(spec, link, previousPlayer, reviewKey) {
     setBusy(true)
     try {
         const found = await rebuildProblem(spec, { getNode })
+        const ladder = await findLadderSetup(found, spec.kind)
         if (gen !== generation) { return }
-        presentProblem(found, spec.kind, { color: spec.color, reviewKey, link })
+        presentProblem(found, spec.kind, { color: spec.color, reviewKey, link, ladder })
         // Reloading the page lands here too, so only speak up if the player's color changed
         if (settings.player !== previousPlayer) { toast(`You’re playing ${capitalize(settings.player)}, the color this problem is for.`) }
     }

@@ -52,7 +52,7 @@ export class BoardView {
     constructor(svg, handlers) {
         this.svg = svg
         this.handlers = handlers
-        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null, fadeStones: false }
+        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null, fadeStones: false, extraStones: [], badges: [] }
         this.hoverPoint = null
 
         const size = SIZE - 1 + 2 * MARGIN
@@ -134,7 +134,7 @@ export class BoardView {
         const point = this.hoverPoint
         const color = this.handlers.canHover()
         const position = this.state.position
-        const show = point && color && position && position.at(point.x, point.y) === EMPTY
+        const show = point && color && position && position.at(point.x, point.y) === EMPTY && !this.extraStoneAt(point.x, point.y)
         this.ghost.setAttribute('visibility', show ? 'visible' : 'hidden')
         this.svg.classList.toggle('clickable', Boolean(show))
         if (show) {
@@ -142,6 +142,10 @@ export class BoardView {
             this.ghost.setAttribute('cy', point.y)
             this.ghost.setAttribute('class', `stone ghost ${colorName(color)}`)
         }
+    }
+
+    extraStoneAt(x, y) {
+        return this.state.extraStones.find((stone) => stone.x === x && stone.y === y)
     }
 
     /**
@@ -152,10 +156,12 @@ export class BoardView {
      *   marks:      [{x, y, shape}] marked points; shape is 'triangle', 'square' or 'circle'
      *   target:     Position | null; stones it adds are drawn faded, stones it lacks are crossed out
      *   fadeStones: boolean; stones are translucent, and hovering one lights up its whole side
+     *   extraStones: [{x, y, color, title?}] stones drawn on the board that aren't part of the game
+     *   badges:     [{x, y, text, title?}] small labels on stones' upper right
      */
     render(state) {
         Object.assign(this.state, state)
-        const { position, lastMove, highlights, marks, target, fadeStones } = this.state
+        const { position, lastMove, highlights, marks, target, fadeStones, extraStones, badges } = this.state
         this.svg.classList.toggle('fade-stones', fadeStones)
         this.updateLitSide()
 
@@ -183,6 +189,11 @@ export class BoardView {
                 }
             }
         }
+        const escape = (text) => String(text).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
+        for (const { x, y, color, title } of extraStones) {
+            if (position.at(x, y) !== EMPTY) { continue }
+            stones.push(`<circle class="stone extra ${color === BLACK ? 'black' : 'white'}" cx="${x}" cy="${y}" r="0.47">${title ? `<title>${escape(title)}</title>` : ''}</circle>`)
+        }
         const marked = (x, y) => marks.some((m) => m.x === x && m.y === y)
         if (lastMove && position.at(lastMove.x, lastMove.y) !== EMPTY && !marked(lastMove.x, lastMove.y)) {
             const { x, y } = lastMove
@@ -203,6 +214,8 @@ export class BoardView {
             return markShape(shape, x, y, `mark ${on}`)
         }).concat(removed.map(({ x, y, on }) =>
             `<path class="removed ${on}" d="M${x - 0.22} ${y - 0.22}L${x + 0.22} ${y + 0.22}M${x + 0.22} ${y - 0.22}L${x - 0.22} ${y + 0.22}"/>`,
+        )).concat(badges.map(({ x, y, text, title }) =>
+            `<g class="badge">${title ? `<title>${escape(title)}</title>` : ''}<circle cx="${x + 0.33}" cy="${y - 0.33}" r="0.21"/><text x="${x + 0.33}" y="${y - 0.33}">${escape(text)}</text></g>`,
         )).join('')
 
         this.updateGhost()

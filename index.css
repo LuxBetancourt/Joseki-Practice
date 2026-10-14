@@ -750,3 +750,27 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 .menu-name { font-weight: 600; }
 .menu-note { font-size: .8rem; color: var(--muted); }
 .menu-note:empty { display: none; }
+
+/* Ladders: badges on the moves that need one, and the note explaining the extra stone */
+.goban .badge circle { fill: var(--accent); stroke: white; stroke-width: .04; }
+.goban .badge text {
+    fill: white;
+    font-size: .26px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+}
+#ladder-note {
+    width: min(100%, calc(100vh - 9rem), 760px);
+    min-width: 280px;
+    box-sizing: border-box;
+    margin: .6rem 0 0;
+    padding: .5rem .8rem;
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    background: var(--panel);
+    font-size: .9rem;
+}
+#ladder-note[hidden] { display: none; }
+@media (max-width: 640px) { #ladder-note { min-width: 0; } }
