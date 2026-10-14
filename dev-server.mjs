@@ -1,12 +1,35 @@
 // Local development server: serves the site and proxies /api/node/{id} to Josekipedia.
 // Usage: node dev-server.mjs [port]
+//
+// Every node is kept on disk (in .node-cache/), so testing never asks Josekipedia for the same
+// node twice, even across restarts. Delete the folder to fetch fresh data.
 
 import { createServer } from 'node:http'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
+const cacheDir = join(root, '.node-cache')
+const pending = new Map() // id -> Promise<text>, so simultaneous requests for a node share one fetch
+
+/** A node's JSON: from the disk cache, or fetched from Josekipedia once and kept. */
+function nodeText(id) {
+    if (!pending.has(id)) {
+        const file = join(cacheDir, `${id}.json`)
+        const promise = readFile(file, 'utf8').catch(async () => {
+            const upstream = await fetch(`https://www.josekipedia.com/db/node.php?id=${id}&pid=0`)
+            const text = await upstream.text()
+            if (!upstream.ok || JSON.parse(text)?._id === undefined) { throw new Error(`Josekipedia returned ${upstream.status}`) }
+            await mkdir(cacheDir, { recursive: true })
+            await writeFile(file, text)
+            return text
+        })
+        promise.catch(() => pending.delete(id)) // Don't keep failures
+        pending.set(id, promise)
+    }
+    return pending.get(id)
+}
 const port = Number(process.argv[2] || process.env.PORT || 8080)
 
 const TYPES = {
@@ -27,9 +50,9 @@ createServer(async (req, res) => {
     const api = /^\/api\/node\/(\d+)$/.exec(url.pathname)
     if (api) {
         try {
-            const upstream = await fetch(`https://www.josekipedia.com/db/node.php?id=${api[1]}&pid=0`)
-            res.writeHead(upstream.status, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(await upstream.text())
+            const text = await nodeText(api[1])
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(text)
         }
         catch (error) {
             res.writeHead(502).end(String(error))
