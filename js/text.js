@@ -52,6 +52,8 @@ export function decodeEntities(text) {
     })
 }
 
+export const capitalize = (text) => text[0].toUpperCase() + text.slice(1)
+
 export const cleanText = (text) => decodeEntities(fixMojibake(text || '')).trim()
 
 /** Splits a path like "pdqfqh" into ["pd", "qf", "qh"]. */

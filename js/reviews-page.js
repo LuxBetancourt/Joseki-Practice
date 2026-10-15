@@ -6,6 +6,7 @@ import { Position, colorName, PASS, fromSgf } from './go.js'
 import { renderShape } from './shape-view.js'
 import { ensureStoneGradients } from './board-view.js'
 import { byKind } from './problem-kinds.js'
+import { capitalize } from './text.js'
 
 const $ = (selector) => document.querySelector(selector)
 const KIND_NAMES = byKind((kind) => kind.name)
@@ -13,7 +14,6 @@ const KIND_NAMES = byKind((kind) => kind.name)
 const deck = new ReviewDeck()
 let undo = null // Puts back the last removal or import
 
-const capitalize = (s) => s[0].toUpperCase() + s.slice(1)
 
 /** The position a saved problem starts from, or null if its moves don't replay. */
 function startPosition(item) {

@@ -10,7 +10,7 @@ import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { orderKinds, addRecentKind, seenKey, addSeen } from './problem-mix.js'
 import { mainLine } from './lines.js'
 import { renderShape, shapeRegion, localShape } from './shape-view.js'
-import { parseComment, splitPath, cleanText } from './text.js'
+import { parseComment, splitPath, cleanText, capitalize } from './text.js'
 import { describeSource } from './sources.js'
 import { BoardView, markShape } from './board-view.js'
 import { JOSEKI, FUSEKI, CLASSIC_OPENINGS } from './starting-points.js'
@@ -158,6 +158,12 @@ async function resolveNode(index) {
     }
 }
 
+/** Plays `coord` for `color` after the current move, as a new move in the game. Throws IllegalMoveError. */
+function pushMove(coord, color) {
+    const entry = currentEntry()
+    pushEntry({ position: entry.position.playSgf(coord, color), move: { coord, color }, node: undefined, path: entry.path + coord })
+}
+
 function pushEntry(entry) {
     history = history.slice(0, current + 1)
     history.push(entry)
@@ -165,19 +171,15 @@ function pushEntry(entry) {
 }
 
 function playMove(coord, { byHuman }) {
-    const entry = currentEntry()
-    const color = entry.position.toPlay
-    let position
+    const color = currentEntry().position.toPlay
+    const answering = byHuman && problemPending() && current === answerIndex()
     try {
-        position = entry.position.playSgf(coord, color)
+        pushMove(coord, color)
     }
     catch (e) {
         if (e instanceof IllegalMoveError) { return toast(e.message, 'error') }
         throw e
     }
-
-    const answering = byHuman && problemPending() && current === answerIndex()
-    pushEntry({ position, move: { coord, color }, node: undefined, path: entry.path + coord })
     ++generation
     if (answering) {
         gradeAnswer(coord)
@@ -196,9 +198,7 @@ function gradeAnswer(coord) {
     const score = stats[problem.kind]
     if (++problem.attempts === 1) { ++score.attempted }
 
-    // Punish wants the strongest answer: the ideal one, or a good one when there's no ideal answer
-    const hasIdeal = [...problem.answers.values()].includes(MoveType.IDEAL)
-    const correct = type === MoveType.IDEAL || (type === MoveType.GOOD && (problem.kind === 'next' || !hasIdeal))
+    const correct = acceptedTypes().includes(type)
     if (problem.attempts === 1) { recordFirstAttempt(correct) }
     if (correct) {
         problem.solved = true
@@ -213,6 +213,15 @@ function gradeAnswer(coord) {
     if (type === MoveType.GOOD) { message = 'Playable, but there’s a stronger punishment.' }
     toast(`${message} Try again.`, 'error')
     takeBackWrongAnswer()
+}
+
+/**
+ * The move types that answer a Next Move or Punish problem: ideal moves, and good ones too for Next
+ * Move. Punish wants the strongest answer, so a good one only counts when there's no ideal one.
+ */
+function acceptedTypes() {
+    const hasIdeal = [...problem.answers.values()].includes(MoveType.IDEAL)
+    return problem.kind === 'next' || !hasIdeal ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
 }
 
 const moveTypeMessage = (type) => (MOVE_TYPE_NAMES[type]
@@ -247,47 +256,65 @@ async function gradeShapeAnswer(coord) {
     if (gen !== generation) { return }
 
     if (!rest) {
-        if (!problem.missed) {
-            problem.missed = true
-            recordFirstAttempt(false)
-        }
         const point = fromSgf(coord)
         let message = moveTypeMessage(type)
         if (point && problem.target.at(point.x, point.y) === mover) {
             message = `That stone is part of the shape, but it isn’t played ${problem.step ? 'next' : 'first'}.`
         }
         else if (type === MoveType.IDEAL || type === MoveType.GOOD) { message = 'That’s joseki, but it leads to a different shape.' }
-        toast(`${message} Try again.`, 'error')
-        takeBackWrongAnswer()
+        missLine(message)
         return
     }
-
-    problem.line = [...problem.line.slice(0, problem.step), { move: coord, color: mover }, ...rest]
-    problem.step += 1
-    problem.hint = false
-    continueShape()
+    followLine({ move: coord, color: mover }, rest)
 }
 
-/** The computer plays the other side's moves along the shape line, until it's the player's turn or the shape is complete. */
-async function continueShape() {
+// --- Problems played out along a line (Final Shape, Play for Sente) ---------------
+// problem.line is the line being played, problem.step how far along it play has got. The player
+// plays their moves (with Play both sides, every move), and the computer plays the rest.
+
+/** A wrong move: a miss (counted once per problem), why, and the move taken back. */
+function missLine(message) {
+    if (!problem.missed) {
+        problem.missed = true
+        recordFirstAttempt(false)
+    }
+    toast(`${message} Try again.`, 'error')
+    takeBackWrongAnswer()
+}
+
+/** A right move: the line now carries on with `rest` after it, and play continues. */
+function followLine(move, rest) {
+    problem.line = [...(problem.line || []).slice(0, problem.step), move, ...rest]
+    problem.step += 1
+    problem.hint = false
+    continueLine()
+}
+
+// The message when a line is complete (with ✓✓ if it was played without a miss)
+const LINE_COMPLETE = {
+    shape: (missed) => (missed ? 'That’s the final shape.' : '✓✓ That’s the final shape!'),
+    sente: (missed) => `${missed ? '' : '✓✓ '}The joseki is over, and you have sente.`,
+}
+
+/** The computer plays the other side's moves along the line, until it's the player's turn or the line is complete. */
+async function continueLine() {
     const gen = generation
     setBusy(true)
     while (problem.step < problem.line.length && !problem.bothSides && problem.line[problem.step].color !== humanColor()) {
         await delay(450)
         if (gen !== generation) { return }
         const { move, color } = problem.line[problem.step]
-        const entry = currentEntry()
-        pushEntry({ position: entry.position.playSgf(move, color), move: { coord: move, color }, node: undefined, path: entry.path + move })
+        pushMove(move, color)
         problem.step += 1
         render()
     }
     if (problem.step >= problem.line.length) {
         problem.solved = true
         if (!problem.missed) {
-            ++stats.shape.solved
+            ++stats[problem.kind].solved
             recordFirstAttempt(true)
         }
-        toast(problem.missed ? 'That’s the final shape.' : '✓✓ That’s the final shape!', 'success')
+        toast(LINE_COMPLETE[problem.kind](problem.missed), 'success')
         autoAdvanceAfterSolving()
     }
     try { await resolveNode(current) } // Load the move info
@@ -326,50 +353,11 @@ async function gradeSenteAnswer(coord) {
     }
 
     if (!option?.sente) {
-        if (!problem.missed) {
-            problem.missed = true
-            recordFirstAttempt(false)
-        }
         const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
-        const message = option
-            ? `That’s joseki, but it ends in gote: ${them} gets to play elsewhere.`
-            : moveTypeMessage(type)
-        toast(`${message} Try again.`, 'error')
-        takeBackWrongAnswer()
+        missLine(option ? `That’s joseki, but it ends in gote: ${them} gets to play elsewhere.` : moveTypeMessage(type))
         return
     }
-
-    problem.line = [...(problem.line || []).slice(0, problem.step), ...option.line]
-    problem.step += 1
-    problem.hint = false
-    continueSente()
-}
-
-/** The computer plays the other side along the line, until it's the player's turn or the joseki is over. */
-async function continueSente() {
-    const gen = generation
-    setBusy(true)
-    while (problem.step < problem.line.length && problem.line[problem.step].color !== humanColor()) {
-        await delay(450)
-        if (gen !== generation) { return }
-        const { move, color } = problem.line[problem.step]
-        const entry = currentEntry()
-        pushEntry({ position: entry.position.playSgf(move, color), move: { coord: move, color }, node: undefined, path: entry.path + move })
-        problem.step += 1
-        render()
-    }
-    if (problem.step >= problem.line.length) {
-        problem.solved = true
-        if (!problem.missed) {
-            ++stats.sente.solved
-            recordFirstAttempt(true)
-        }
-        toast(`${problem.missed ? '' : '✓✓ '}The joseki is over, and you have sente.`, 'success')
-        autoAdvanceAfterSolving()
-    }
-    try { await resolveNode(current) } // Load the move info
-    catch { /* The move info will say it couldn't be found */ }
-    if (gen === generation) { setBusy(false) }
+    followLine(option.line[0], option.line.slice(1))
 }
 
 /** Shows a wrong answer briefly, then takes it back. */
@@ -763,10 +751,8 @@ function setupPosition(moves) {
     history = [{ position: new Position(), move: null, node: freePlay ? null : { id: ROOT_ID, labels: [] }, path: '' }]
     current = 0
     for (const coord of moves) {
-        const entry = currentEntry()
-        const color = entry.position.toPlay
         try {
-            pushEntry({ position: entry.position.playSgf(coord, color), move: { coord, color }, node: undefined, path: entry.path + coord })
+            pushMove(coord, currentEntry().position.toPlay)
         }
         catch {
             toast(`Couldn’t set up that position (illegal move at ${sgfToDisplay(coord)}).`, 'error')
@@ -777,7 +763,6 @@ function setupPosition(moves) {
 
 // --- Rendering -----------------------------------------------------------------
 
-const capitalize = (s) => s[0].toUpperCase() + s.slice(1)
 
 // Points marked on the board from the move comment (pinned by clicking) or while hovering a
 // reference. Pins belong to the position they were made in. Each coordinate in the comment gets
@@ -864,8 +849,7 @@ function render() {
             highlights = [] // The answer is marked among the choices instead
         }
         else {
-            const hasIdeal = [...problem.answers.values()].includes(MoveType.IDEAL)
-            const accepted = problem.kind === 'next' || !hasIdeal ? [MoveType.IDEAL, MoveType.GOOD] : [MoveType.IDEAL]
+            const accepted = acceptedTypes()
             highlights = [...problem.answers].filter(([, type]) => accepted.includes(type)).map(([move, type]) => toHighlight(move, type))
         }
     }
