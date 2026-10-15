@@ -18,7 +18,11 @@ const $ = (selector) => document.querySelector(selector)
 
 // --- Settings ------------------------------------------------------------------
 
+// Bumped when a change to the defaults should reach settings saved before it (see loadSettings)
+const SETTINGS_VERSION = 2
+
 const DEFAULT_SETTINGS = {
+    version: SETTINGS_VERSION,
     mode: 'problems', // 'explore' | 'problems' | 'review'
     problemTypes: { next: true, punish: true, shape: true, path: true, better: true, tenuki: true, sente: true },
     player: 'black',
@@ -29,7 +33,7 @@ const DEFAULT_SETTINGS = {
     showMoveInfo: true,
     showFollowUps: false,
     autoAdvance: false, // Go to the next problem automatically after solving one
-    shapeBothSides: false, // In Final Shape, the player plays the other side's moves too
+    shapeBothSides: true, // In Final Shape, the player plays the other side's moves too
     replaySetup: false, // Play each problem's moves out from an empty board before it starts
     expanded: [], // Starting-point branches the player has expanded
     start: 'empty',
@@ -42,6 +46,9 @@ function loadSettings() {
             // Next Move, Punish and Final Shape used to be separate modes, and Explore was Practice
             if (['next', 'punish', 'shape'].includes(saved.mode)) { saved.mode = 'problems' }
             if (saved.mode === 'practice') { saved.mode = 'explore' }
+            // Version 2: Final Shape's Play both sides became on by default
+            if (!(saved.version >= 2)) { saved.shapeBothSides = true }
+            saved.version = SETTINGS_VERSION
             return { ...DEFAULT_SETTINGS, ...saved, problemTypes: { ...DEFAULT_SETTINGS.problemTypes, ...saved.problemTypes } }
         }
 
