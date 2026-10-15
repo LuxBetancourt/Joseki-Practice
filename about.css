@@ -115,3 +115,25 @@ kbd {
     .diagram svg { min-width: 540px; }
     .diagram figcaption { position: sticky; left: 0; width: min(100%, calc(100vw - 4rem)); }
 }
+
+/* Diagram colors: blue for browsers, amber for the proxy, green for Josekipedia */
+:root {
+    --d-browser: #3f74b5; --d-browser-fill: #dfe9f6;
+    --d-proxy: #b9741f; --d-proxy-fill: #f7e6cf;
+    --d-source-fill: #dcefe2;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --d-browser: #74a6e6; --d-browser-fill: #22324a;
+        --d-proxy: #e2a352; --d-proxy-fill: #3e2f1d;
+        --d-source-fill: #1f3a2a;
+    }
+}
+.d-browser { fill: var(--d-browser-fill); stroke: var(--d-browser); }
+.d-proxy { fill: var(--d-proxy-fill); stroke: var(--d-proxy); }
+.d-key { fill: var(--d-source-fill); }
+.d-browser-line { stroke: var(--d-browser); }
+.d-proxy-line { stroke: var(--d-proxy); }
+.d-browser-text { fill: var(--d-browser); }
+.d-proxy-text { fill: var(--d-proxy); }
+.d-node-saved { fill: var(--d-browser); }
