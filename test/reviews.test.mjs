@@ -155,3 +155,15 @@ test('import: rejects other files, and skips damaged problems', () => {
     assert.equal(items[1].step, 5)
     assert.equal(items[1].lapses, 1)
 })
+
+test('items added with anyColor are due for either color, and keep the mark through an export', () => {
+    const { deck } = makeDeck()
+    deck.add(spec(['pd', 'qc', 'rd'], 'punish', 2), { anyColor: true })
+    deck.add(spec(['pd', 'qf', 'nc'], 'next', 2))
+    assert.deepEqual(deck.due({ color: 1 }).map((item) => item.moves.join('')), ['pdqcrd'])
+    assert.equal(deck.due({ color: 2 }).length, 2)
+
+    const { deck: copy } = makeDeck()
+    copy.import(deck.export())
+    assert.deepEqual(copy.due({ color: 1 }).map((item) => item.moves.join('')), ['pdqcrd'])
+})

@@ -42,7 +42,10 @@ function noteShown(kind, moves) {
 }
 
 // In Review mode the player takes the color they missed the problem with
-const humanColor = () => (settings.mode === 'review' && problem ? problem.spec.color : settings.player === 'black' ? BLACK : WHITE)
+const playerColor = () => (settings.player === 'black' ? BLACK : WHITE) // The color chosen under Player
+// The color the player is playing: a review's own color (which in Problems mode can differ from
+// the chosen one, see ReviewDeck.due), otherwise the chosen one
+const humanColor = () => (problem && (settings.mode === 'review' || problem.reviewKey) ? problem.spec.color : playerColor())
 
 // --- Game state ----------------------------------------------------------------
 // game[i] is the position after i moves. Each entry's `node` is the Josekipedia node for
@@ -94,7 +97,7 @@ const SEARCH_DOWNLOAD_BUDGET = 120
 const startPath = () => (settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start)
 const dueReviews = () => (settings.mode === 'review'
     ? deck.due()
-    : deck.due({ kinds: enabledProblemTypes(), color: humanColor(), startMoves: splitPath(startPath()) }))
+    : deck.due({ kinds: enabledProblemTypes(), color: playerColor(), startMoves: splitPath(startPath()) }))
 
 /** Updates the review deck with how the player did on their first attempt at the problem. */
 function recordFirstAttempt(correct) {
@@ -365,7 +368,8 @@ async function gradeSenteAnswer(coord) {
 
 /**
  * A wrong answer that Josekipedia marks as a mistake (a bad or trick move) goes into Review as a
- * Punish problem for the other side, when Josekipedia records how to punish it. Call it before
+ * Punish problem for the other side, when Josekipedia records how to punish it. It's for the
+ * other color, so Problems mode mixes it in whichever color the player is playing. Call it before
  * the move is taken back. Checking costs one lookup (the position after the mistake), and only
  * for these moves.
  */
@@ -377,7 +381,7 @@ async function reviewPunishment(coord, type) {
     catch { return } // Couldn't check; the miss is still in Review as the problem it was
     if (!result.problem) { return }
     const spec = { kind: 'punish', moves, color: result.problem.color, data: problemData('punish', result.problem) }
-    if (!deck.add(spec)) { return } // Already in Review
+    if (!deck.add(spec, { anyColor: true })) { return } // Already in Review
     toast(`Added to Review: punishing ${sgfToDisplay(coord)} as ${capitalize(colorName(spec.color))}.`, 'info')
     render()
 }
@@ -542,6 +546,7 @@ async function newProblem() {
         const ladder = await findLadderSetup(found, kind)
         if (gen !== generation) { return }
         presentProblem(found, kind, { reviewKey, color: reviewColor || found.color || humanColor(), ladder })
+        if (reviewColor && reviewColor !== playerColor()) { toast(`You’re playing ${capitalize(colorName(reviewColor))} for this review.`) }
     }
     catch (error) {
         if (gen !== generation) { return }

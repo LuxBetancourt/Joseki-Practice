@@ -60,11 +60,15 @@ export class ReviewDeck {
         return item
     }
 
-    /** Adds a problem the player chose to review (due now), unless it's already in the deck. Returns the item or null. */
-    add(spec) {
+    /**
+     * Adds a problem to review (due now), unless it's already in the deck. Returns the item or null.
+     * `anyColor` lets it come up in Problems mode whichever color the player is playing (see due).
+     */
+    add(spec, { anyColor = false } = {}) {
         const key = reviewKey(spec)
         if (this.find(key)) { return null }
         const item = { key, kind: spec.kind, moves: spec.moves, color: spec.color, data: spec.data, added: this.now(), lapses: 0, step: 0, due: this.now() }
+        if (anyColor) { item.anyColor = true }
         this.items.push(item)
         this.save()
         return item
@@ -100,13 +104,13 @@ export class ReviewDeck {
 
     /**
      * Due items, most overdue first, optionally limited to some kinds, a color and a starting
-     * point (to match the player's settings).
+     * point (to match the player's settings). Items marked anyColor match any color.
      * @param {{ kinds?: string[], color?: number, startMoves?: string[] }} filter
      */
     due({ kinds, color, startMoves = [] } = {}) {
         const now = this.now()
         return this.items
-            .filter((item) => item.due <= now && (!kinds || kinds.includes(item.kind)) && (!color || item.color === color)
+            .filter((item) => item.due <= now && (!kinds || kinds.includes(item.kind)) && (!color || item.color === color || item.anyColor)
                 && startMoves.every((move, i) => item.moves[i] === move))
             .sort((a, b) => a.due - b.due)
     }
@@ -157,5 +161,6 @@ export function readExport(text) {
         lapses: Number.isInteger(item.lapses) && item.lapses >= 0 ? item.lapses : 1, // 0: added by the player
         step: Number.isInteger(item.step) ? Math.min(Math.max(item.step, 0), REVIEW_STEPS.length - 1) : 0,
         due: item.due,
+        ...(item.anyColor === true && { anyColor: true }),
     }))
 }
