@@ -1,6 +1,8 @@
 // Spaced repetition for missed problems. The deck lives in localStorage; each item holds enough
 // to rebuild its problem (kind, moves, color and kind-specific data) plus its schedule.
 
+import { KINDS } from './problem-kinds.js'
+
 const STORAGE_KEY = 'reviews:v1'
 const MINUTE = 60 * 1000
 const HOUR = 60 * MINUTE
@@ -133,7 +135,7 @@ export class ReviewDeck {
 }
 
 const EXPORT_APP = 'joseki-practice-reviews'
-const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki', 'sente']
+
 
 /** The valid items in an exported deck, skipping any that are damaged. Throws if it isn't an export at all. */
 export function readExport(text) {

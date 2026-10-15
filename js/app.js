@@ -1,9 +1,9 @@
 import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, downloadCount, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import {
-    generateNextMove, generatePunish, generateFinalShape, generatePickPath, generateWhosBetter, generateTenuki, generateSente, senteOptionAt,
-    problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup,
+    GENERATORS, senteOptionAt, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup,
 } from './problems.js'
+import { PROBLEM_KINDS, KINDS, byKind } from './problem-kinds.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { orderKinds, addRecentKind, seenKey, addSeen } from './problem-mix.js'
 import { mainLine } from './lines.js'
@@ -24,7 +24,7 @@ const SETTINGS_VERSION = 2
 const DEFAULT_SETTINGS = {
     version: SETTINGS_VERSION,
     mode: 'problems', // 'explore' | 'problems' | 'review'
-    problemTypes: { next: true, punish: true, shape: true, path: true, better: true, tenuki: true, sente: true },
+    problemTypes: byKind(() => true),
     player: 'black',
     ideal: true, good: false, bad: false, trick: false, question: false,
     firstTen: true,
@@ -137,35 +137,15 @@ let generation = 0
 //   spec:      the problem as plain data, saved to the review deck if the player misses it
 //   reviewKey: set when the problem is a review from the deck
 let problem = null
-const stats = { // This session's score per mode
-    next: { solved: 0, attempted: 0 },
-    punish: { solved: 0, attempted: 0 },
-    shape: { solved: 0, attempted: 0 },
-    path: { solved: 0, attempted: 0 },
-    better: { solved: 0, attempted: 0 },
-    tenuki: { solved: 0, attempted: 0 },
-    sente: { solved: 0, attempted: 0 },
-}
-const GENERATORS = {
-    next: generateNextMove, punish: generatePunish, shape: generateFinalShape, path: generatePickPath,
-    better: generateWhosBetter, tenuki: generateTenuki, sente: generateSente,
-}
-// Shown on the banner that introduces each problem
-const PROBLEM_TYPE_GOALS = {
-    next: 'Find the joseki move', punish: 'Punish the mistake', shape: 'Play out the faded shape',
-    path: 'Pick the joseki sequence', better: 'Judge the position', tenuki: 'Can you play elsewhere?',
-    sente: 'End the joseki with sente',
-}
-const PROBLEM_TYPE_NAMES = {
-    next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path', better: 'Who’s Better?', tenuki: 'Tenuki-able?',
-    sente: 'Play for Sente',
-}
+const stats = byKind(() => ({ solved: 0, attempted: 0 })) // This session's score per type
+const PROBLEM_TYPE_NAMES = byKind((kind) => kind.name)
+const PROBLEM_TYPE_GOALS = byKind((kind) => kind.goal) // Shown on the banner that introduces each problem
 // Problems answered with buttons rather than on the board, and the answers they offer
-const ANSWER_CHOICES = {
-    better: [['black', 'Black is better'], ['even', 'Even'], ['white', 'White is better']],
-    tenuki: [['yes', 'Tenuki is fine'], ['no', 'Must play locally']], // Shown with a stone of the side asked about
-}
-const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => settings.problemTypes[kind])
+const ANSWER_CHOICES = Object.fromEntries(KINDS.filter((kind) => PROBLEM_KINDS[kind].choices).map((kind) => [kind, PROBLEM_KINDS[kind].choices]))
+const answeredBy = (kind) => PROBLEM_KINDS[kind].answeredBy
+// Answered with the cards or buttons that stand in for (or sit below) the board, not by playing on it
+const answeredOffBoard = (kind) => ['cards', 'buttons'].includes(answeredBy(kind))
+const enabledProblemTypes = () => KINDS.filter((kind) => settings.problemTypes[kind])
 
 // Problems the player missed come back for review (see reviews.js). In Problems mode, Next mixes
 // due reviews in; Review mode works through every due review.
@@ -187,17 +167,17 @@ function recordFirstAttempt(correct) {
     else if (problem.reviewKey) { deck.recordSuccess(problem.reviewKey) }
 }
 const problemPending = () => problem && !problem.solved && !problem.revealed
-// Where the player answers: shape problems move along their line as the player plays it out
-const answerIndex = () => problem.index + (['shape', 'sente'].includes(problem.kind) ? problem.step : 0)
-// Final Shape, Play for Sente and Pick the Path follow a fixed sequence, so moving around the game would break them
-const navigationLocked = () => replaying() || (problemPending() && ['shape', 'sente', 'path', 'better', 'tenuki'].includes(problem.kind))
+// Where the player answers: problems played out along a line move along it as the player plays
+const answerIndex = () => problem.index + (answeredBy(problem.kind) === 'line' ? problem.step : 0)
+// Only problems answered with a single move can be navigated around while unanswered; the others
+// follow a fixed sequence (or are answered off the board), which moving around would break
+const navigationLocked = () => replaying() || (problemPending() && answeredBy(problem.kind) !== 'move')
 
 const currentEntry = () => history[current]
 // A Final Shape problem being played out with both sides by the player (see settings.shapeBothSides)
 const playingBothSides = () => Boolean(problem?.bothSides && problemPending())
 const isHumanTurn = (entry = currentEntry()) => freePlay || playingBothSides() || entry.position.toPlay === humanColor()
-// Path problems are answered by picking a sequence, not by playing on the board
-const canPlayOnBoard = () => !busy && !replaying() && isHumanTurn() && !(problemPending() && ['path', 'better', 'tenuki'].includes(problem.kind))
+const canPlayOnBoard = () => !busy && !replaying() && isHumanTurn() && !(problemPending() && answeredOffBoard(problem.kind))
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 // While the next problem is being found, the last one's bar, answer buttons and cards stay where
@@ -485,7 +465,7 @@ function autoAdvanceAfterSolving() {
 
 function revealAnswer() {
     if (!problemPending()) { return }
-    if (problem.kind === 'shape' || problem.kind === 'sente') {
+    if (answeredBy(problem.kind) === 'line') {
         // A hint: highlight the player's next move, and let them carry on playing it out
         if (problem.attempts === 0) { ++stats[problem.kind].attempted }
         if (!problem.missed) {
@@ -610,7 +590,7 @@ async function newProblem() {
             // Some types are scarce from some starting points (e.g. few recorded mistakes after a fuseki)
             const names = kinds.map((k) => PROBLEM_TYPE_NAMES[k])
             const which = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : names[0]
-            const suggestion = kinds.length < Object.keys(GENERATORS).length ? ' Turning on more problem types may help.' : ''
+            const suggestion = kinds.length < KINDS.length ? ' Turning on more problem types may help.' : ''
             toast(`Couldn’t find a ${which} problem from this starting point.${suggestion}`, 'warning', { label: 'Try Again', action: () => newProblem() })
             return
         }
@@ -945,7 +925,7 @@ function render() {
         if (problem.inferredFrom) {
             highlights = [toHighlight(problem.inferredFrom, MoveType.IDEAL)] // The local move the joseki continues with
         }
-        else if (['path', 'better', 'tenuki'].includes(problem.kind)) {
+        else if (answeredOffBoard(problem.kind)) {
             highlights = [] // The answer is marked among the choices instead
         }
         else {
@@ -1440,8 +1420,7 @@ function renderProblemBar() {
     else if (problem?.solved) {
         prompt = settings.autoAdvance
             ? 'Solved! Next problem coming up…'
-            : { shape: 'Solved! That’s the final shape.', path: 'Solved! That’s the joseki.', better: 'Correct!', tenuki: 'Correct!', sente: 'Solved! You end in sente.' }[problem.kind]
-                || 'Solved! Keep playing, or get a new problem.'
+            : PROBLEM_KINDS[problem.kind].solved || 'Solved! Keep playing, or get a new problem.'
     }
     else if (problem?.revealed) { prompt = ANSWER_CHOICES[problem.kind] ? 'The answer is marked below.' : 'Answers are highlighted.' }
     else if (!problem && !busy) {
@@ -1495,7 +1474,7 @@ async function openAddMenu() {
     $('#add-review').setAttribute('aria-expanded', 'true')
     menu.hidden = false
     const moves = splitPath(entry.path)
-    const items = Object.keys(GENERATORS).map((kind) => {
+    const items = KINDS.map((kind) => {
         const item = document.createElement('button')
         item.type = 'button'
         item.setAttribute('role', 'menuitem')

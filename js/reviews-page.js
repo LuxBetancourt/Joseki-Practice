@@ -5,11 +5,10 @@ import { ReviewDeck, relativeTime } from './reviews.js'
 import { Position, colorName, PASS, fromSgf } from './go.js'
 import { renderShape } from './shape-view.js'
 import { ensureStoneGradients } from './board-view.js'
+import { byKind } from './problem-kinds.js'
 
 const $ = (selector) => document.querySelector(selector)
-const KIND_NAMES = {
-    next: 'Next Move', punish: 'Punish', shape: 'Final Shape', path: 'Pick the Path', better: 'Who’s Better?', tenuki: 'Tenuki-able?', sente: 'Play for Sente',
-}
+const KIND_NAMES = byKind((kind) => kind.name)
 
 const deck = new ReviewDeck()
 let undo = null // Puts back the last removal or import

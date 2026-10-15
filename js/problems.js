@@ -6,6 +6,7 @@ import { ROOT_ID, MoveType, TENUKI_LABEL } from './josekipedia.js'
 import { CLASSIC_OPENINGS } from './starting-points.js'
 import { mainLine } from './lines.js'
 import { findLadder, ladderStoneOnPath } from './ladder.js'
+import { KINDS, PROBLEM_KINDS, byKind } from './problem-kinds.js'
 
 const MAX_TARGET_DEPTH = 12
 const MAX_DEPTH = 30
@@ -342,8 +343,6 @@ async function pathFromPicks(start, picks, getNode) {
     }
     return options
 }
-
-const KINDS = ['next', 'punish', 'shape', 'path', 'better', 'tenuki', 'sente']
 
 // --- Play for Sente ---------------------------------------------------------------
 
@@ -802,7 +801,7 @@ export async function problemAt(kind, moves, { color, firstTen = false, getNode,
 // Problem links: a letter for the kind, one for the color, the moves, then anything that can't be
 // worked out again from Josekipedia, each after a dot. For example "sbpdqfncqcpc.qe" is a Final
 // Shape problem for Black after pd qf nc qc pc, whose answer is qe.
-const KIND_CODES = { next: 'n', punish: 'p', shape: 's', path: 'l', better: 'b', tenuki: 't', sente: 'e' }
+const KIND_CODES = byKind((kind) => kind.code)
 const MOVE = '[a-t]{2}'
 
 /** A saved problem ({ kind, moves, color, data }) as a short, URL-safe string, for sharing. */
@@ -824,7 +823,7 @@ function compactData(kind, data) {
 
 /** The reverse of encodeProblem (and of the older, longer JSON links). Throws if the text isn't a problem link. */
 export function decodeProblem(text) {
-    const match = new RegExp(`^([npslbte])([bw])((?:${MOVE})*)((?:\\.[0-9a-t-]+)*)$`).exec(text)
+    const match = new RegExp(`^([${Object.values(KIND_CODES).join('')}])([bw])((?:${MOVE})*)((?:\\.[0-9a-t-]+)*)$`).exec(text)
     if (!match) { return decodeLegacyProblem(text) }
     const [, code, colorCode, moves, rest] = match
     const kind = KINDS.find((k) => KIND_CODES[k] === code)
@@ -856,4 +855,10 @@ function decodeLegacyProblem(text) {
         throw new Error('Not a problem link')
     }
     return { kind: k, moves: m.match(/../g), color: c, data: d }
+}
+
+/** Each problem type's generator (see PROBLEM_KINDS). */
+export const GENERATORS = {
+    next: generateNextMove, punish: generatePunish, shape: generateFinalShape, path: generatePickPath,
+    better: generateWhosBetter, tenuki: generateTenuki, sente: generateSente,
 }
