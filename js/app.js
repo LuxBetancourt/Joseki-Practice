@@ -121,16 +121,19 @@ let busy = false
 // Bumped whenever the game is navigated; async work started earlier checks it and bails out.
 let generation = 0
 
-// The active problem in Problems mode: the player must answer at history[index].
-//   kind: 'next' | 'punish' | 'shape'
+// The active problem in Problems and Review modes: the player must answer at history[index].
+//   kind: one of PROBLEM_KINDS (see problem-kinds.js)
 //   answers: Map of coord -> move type for every move Josekipedia knows there
 //   mistake: { move, type } for punish problems
 //   answer, line, target, step, missed, hint: for shape problems, the move that starts the
 //                         line, the line itself and the final position it reaches; how many of
 //                         its moves have been played; whether the player has gone wrong; and
-//                         whether their next move is highlighted
+//                         whether their next move is highlighted (sente problems use line,
+//                         step, missed and hint the same way, and options for the first move)
 //   line, options, wrong: for path problems, the joseki line, the sequences shown (see
 //                         generatePickPath) and the indexes of options already picked wrongly
+//   answer, labels / inferredFrom: for Who's Better? and Tenuki-able?, the answer and its evidence
+//   ladder:    a ladder the problem relies on (see findLadderSetup)
 //   spec:      the problem as plain data, saved to the review deck if the player misses it
 //   reviewKey: set when the problem is a review from the deck
 let problem = null
@@ -301,10 +304,6 @@ const moveTypeMessage = (type) => (MOVE_TYPE_NAMES[type]
     ? `That’s a ${MOVE_TYPE_NAMES[type] === 'question' ? 'questionable' : MOVE_TYPE_NAMES[type]} move.`
     : 'That move isn’t in Josekipedia here.')
 
-/**
- * Shape problems accept the move that starts the target line, or any other joseki move whose own
- * main line reaches the same final position.
- */
 /**
  * Final Shape: the player plays out the whole line, one of their moves at a time. The line's move
  * is correct, as is any other joseki move whose main line still reaches the target (the line then
@@ -571,6 +570,7 @@ async function newProblem() {
         // Reviews: rebuild the most overdue one that still fits Josekipedia
         const reviewing = review || (due.length && Math.random() < REVIEW_MIX) ? due : []
         for (const item of reviewing) {
+            if (gen !== generation) { return } // The player has moved on
             try {
                 found = await rebuildProblem(item, { getNode })
                 kind = item.kind
@@ -626,7 +626,6 @@ async function newProblem() {
     }
 }
 
-/** Puts a generated or rebuilt problem on the board. */
 /**
  * How the problem shows a ladder it relies on (see ladderSetup), or null. Never fails: without
  * it, the problem still works, just without the ladder stone.
@@ -642,6 +641,7 @@ async function findLadderSetup(found, kind) {
     }
 }
 
+/** Puts a generated or rebuilt problem on the board. */
 function presentProblem(found, kind, { reviewKey = null, color = humanColor(), link, ladder = null } = {}) {
     setupPosition(found.moves)
     problem = {
@@ -1463,7 +1463,6 @@ function renderProblemBar() {
         .join('\n')
 }
 
-/** The Review mode label's due count, and the deck summary shown in Review mode. */
 // --- Adding Explore positions to Review ------------------------------------------
 // In Explore, the current position can be saved to Review as any type of problem it fits.
 
@@ -1551,6 +1550,7 @@ async function openAddMenu() {
     menu.querySelector('button:not(:disabled)')?.focus()
 }
 
+/** The Review mode label's due count, and the deck summary shown in Review mode. */
 function renderReviewStatus() {
     const dueCount = deck.due().length
     // A dot on the Review mode button when problems are due; the count is in its tooltip and for screen readers
