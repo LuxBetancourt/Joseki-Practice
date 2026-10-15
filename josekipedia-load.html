@@ -27,7 +27,7 @@
     </header>
     <main>
         <section>
-            <h2>Why This Page Exists</h2>
+            <h2>Background</h2>
             <p>
                 Every position on this site comes from <a href="https://www.josekipedia.com">Josekipedia</a>, a free joseki dictionary that its users write together.
                 Josekipedia was built for people browsing it by hand, and a practice site that generates endless problems could easily send it far more requests than that.
@@ -37,7 +37,7 @@
         </section>
 
         <section>
-            <h2>What the Site Asks For</h2>
+            <h2>The Data</h2>
             <p>
                 Josekipedia stores its joseki as a tree. Each point in the tree is a position, and its record lists the moves that can follow, how good each one is, and any comments and labels.
                 This site asks for one of these records at a time, by its number, the same way Josekipedia's own pages do. A record is usually under a kilobyte.
@@ -49,14 +49,14 @@
         </section>
 
         <section>
-            <h2>Where a Position Comes From</h2>
+            <h2>Caching</h2>
             <p>
                 When the site needs a position, it checks the places below in order and stops at the first one that has it.
                 Josekipedia is only asked when none of them do.
             </p>
             <figure class="diagram">
                 <svg viewBox="0 0 640 492" role="img" aria-labelledby="layers-title layers-desc">
-                    <title id="layers-title">Where a position comes from</title>
+                    <title id="layers-title">Caching</title>
                     <desc id="layers-desc">Six places in order: memory, saved in your browser for a year, the browser cache for 30 days, Cloudflare's cache for 30 days, the shared database for a year, and finally Josekipedia.</desc>
                     <defs>
                         <marker id="layers-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead" d="M0 0L10 5L0 10z"/></marker>
@@ -119,14 +119,14 @@
         </section>
 
         <section>
-            <h2>One Request per Position, for Everyone</h2>
+            <h2>The Shared Database</h2>
             <p>
                 The shared database is the part that matters most. When anyone's browser needs a position nobody has asked for yet, the proxy fetches it from Josekipedia and saves the answer.
                 For the next year, everyone else who needs that position gets the saved copy.
             </p>
             <figure class="diagram">
                 <svg viewBox="0 0 640 300" role="img" aria-labelledby="shared-title shared-desc">
-                    <title id="shared-title">One request per position, for everyone</title>
+                    <title id="shared-title">The shared database</title>
                     <desc id="shared-desc">Four visitors on different days ask the proxy for the same position. Only the first visitor's request goes on to Josekipedia; the other three get the copy saved in the shared database.</desc>
                     <defs>
                         <marker id="shared-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead" d="M0 0L10 5L0 10z"/></marker>
@@ -177,7 +177,7 @@
         </section>
 
         <section>
-            <h2>Requests That Arrive Together</h2>
+            <h2>Simultaneous Requests</h2>
             <p>
                 Two people can need the same new position at the same moment, for example if they're both working through the same joseki.
                 If the second request arrives while the proxy is still waiting on Josekipedia for the first, it waits for that answer and uses it too.
@@ -185,7 +185,7 @@
             </p>
             <figure class="diagram">
                 <svg viewBox="0 0 640 230" role="img" aria-labelledby="together-title together-desc">
-                    <title id="together-title">Requests that arrive together share one fetch</title>
+                    <title id="together-title">Simultaneous requests</title>
                     <desc id="together-desc">Three requests for the same new position reach the proxy at about the same time. The proxy sends one request to Josekipedia and gives the answer to all three.</desc>
                     <defs>
                         <marker id="together-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead" d="M0 0L10 5L0 10z"/></marker>
@@ -216,14 +216,14 @@
         </section>
 
         <section>
-            <h2>How Problems Are Found, and Their Limits</h2>
+            <h2>Problem Searches</h2>
             <p>
                 Problems are made by walking down Josekipedia's tree along a random joseki line, one move at a time, until the walk reaches a position that makes a good problem of the chosen type.
                 Each step of the walk needs the next position's record.
             </p>
             <figure class="diagram">
                 <svg viewBox="0 0 640 300" role="img" aria-labelledby="walk-title walk-desc">
-                    <title id="walk-title">A problem search walking the tree</title>
+                    <title id="walk-title">A problem search</title>
                     <desc id="walk-desc">A tree of positions. A walk goes from the empty board down one branch. Positions near the top are already saved; the deeper ones on the path are new and are each fetched once.</desc>
                     <!-- Branches -->
                     <path class="d-edge" d="M200 34L90 104M200 34L200 104M200 34L310 104M90 104L50 174M90 104L130 174M200 104L170 174M200 104L240 174M310 104L290 174M310 104L350 174M240 174L210 244M240 174L270 244M130 174L130 244"/>
@@ -266,28 +266,28 @@
                 The site also limits what a search may ask for:
             </p>
             <ul>
-                <li><strong>A budget per search.</strong> A search stops starting new walks once it has downloaded 120 positions. This only affects unusual searches, like looking for a rare problem type from a starting point where it barely occurs.</li>
-                <li><strong>One search at a time.</strong> The <em>Next</em> button is greyed out while a search runs, so impatient clicking can't start several searches at once.</li>
-                <li><strong>Lines followed only as far as needed.</strong> Several problem types follow a joseki to its end. Each one stops at the longest line it can use, so it doesn't fetch positions it would throw away.</li>
-                <li><strong>Checks only when asked.</strong> <em>Add to Review</em> in Explore mode only checks the more expensive problem types when you pick one.</li>
-                <li><strong>Small, bounded extras.</strong> For problems that depend on a ladder, the site may look ahead up to 25 positions to see where the ladder runs. It reads the joseki comments first, which often show the ladder already, and only looks ahead when they don't.</li>
+                <li><strong>Download budget.</strong> A search stops starting new walks once it has downloaded 120 positions. This only affects unusual searches, like looking for a rare problem type from a starting point where it barely occurs.</li>
+                <li><strong>The Next button.</strong> It's greyed out while a search runs, so impatient clicking can't start several searches at once.</li>
+                <li><strong>Line length.</strong> Several problem types follow a joseki to its end. Each one stops at the longest line it can use, so it doesn't fetch positions it would throw away.</li>
+                <li><strong>Add to Review.</strong> In Explore mode, it only checks the more expensive problem types when you pick one.</li>
+                <li><strong>Ladders.</strong> For problems that depend on a ladder, the site may look ahead up to 25 positions to see where the ladder runs. It reads the joseki comments first, which often show the ladder already, and only looks ahead when they don't.</li>
             </ul>
         </section>
 
         <section>
-            <h2>Things the Site Doesn't Do</h2>
+            <h2>Prefetching and Crawling</h2>
             <ul>
                 <li>
-                    <strong>It doesn't fetch positions ahead of time.</strong> Downloading the positions around each step of a walk in advance would make the first searches faster, but it would also ask Josekipedia for many positions that never get used.
+                    The site doesn't fetch positions ahead of time. Downloading the positions around each step of a walk in advance would make the first searches faster, but it would also ask Josekipedia for many positions that never get used.
                     So searches are slower at first, and speed up as the shared database fills.
                 </li>
-                <li><strong>It doesn't copy Josekipedia wholesale.</strong> Positions are only fetched when someone's practice needs them.</li>
-                <li><strong>It doesn't ask for anything else.</strong> The site only requests position records. It doesn't load Josekipedia's pages, images or search.</li>
+                <li>It doesn't copy Josekipedia wholesale. Positions are only fetched when someone's practice needs them.</li>
+                <li>It only requests position records. It doesn't load Josekipedia's pages, images or search.</li>
             </ul>
         </section>
 
         <section>
-            <h2>While Working on the Site</h2>
+            <h2>Development</h2>
             <p>
                 Development creates load too, since testing means loading lots of problems.
                 The local development server keeps every position it fetches in a folder on disk, so testing never asks Josekipedia for the same position twice, even across days.
@@ -296,9 +296,10 @@
         </section>
 
         <section>
-            <h2>If You Run Josekipedia</h2>
+            <h2>Contact</h2>
             <p>
-                Thank you for making it. If you'd like this site to change how it uses Josekipedia's data, whether that's lower limits, a different way of fetching, or something else, please <a href="https://github.com/LuxBetancourt/Joseki-Practice/issues">open an issue on GitHub</a> or get in touch, and I'll change it.
+                If you run Josekipedia and would like this site to change how it uses your data, whether that's lower limits, a different way of fetching, or something else, please <a href="https://github.com/LuxBetancourt/Joseki-Practice/issues">open an issue on GitHub</a> or get in touch, and I'll change it.
+                And thank you for making Josekipedia.
             </p>
         </section>
     </main>
