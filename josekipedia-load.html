@@ -30,9 +30,8 @@
             <h2>Background</h2>
             <p>
                 Every position on this site comes from <a href="https://www.josekipedia.com">Josekipedia</a>, a free joseki dictionary that its users write together.
-                Josekipedia was built for people browsing it by hand, and a practice site that generates endless problems could easily send it far more requests than that.
-                I want this site to be a good neighbor, so it saves everything it gets and asks for as little as it can.
-                This page goes through how that works.
+                A site that makes practice problems automatically can send Josekipedia many more requests than someone browsing it by hand.
+                To keep that load small, this site saves everything it gets and asks for as little as it can.
             </p>
         </section>
 
@@ -44,7 +43,7 @@
             </p>
             <p>
                 Browsers don't let one website read another site's data unless that site allows it, and Josekipedia doesn't. So the site's requests go through a small proxy that runs on Cloudflare.
-                The proxy is also where the most important saving happens, as the next sections show.
+                The proxy also keeps a copy of everything it fetches, which is where most of the saving happens.
             </p>
         </section>
 
@@ -104,7 +103,7 @@
             <p>The first three are in your own browser:</p>
             <ul>
                 <li><strong>Memory</strong> holds every position the page has used since you opened it.</li>
-                <li><strong>Saved in your browser</strong> keeps every position you've used for a year, so coming back to the site the next day costs Josekipedia nothing for positions you've seen.</li>
+                <li><strong>Saved in your browser</strong> keeps every position you've used for a year, so when you come back the next day, positions you've already seen don't need any requests.</li>
                 <li><strong>The browser cache</strong> is the browser's ordinary store for downloaded files. The proxy tells it to keep positions for 30 days.</li>
             </ul>
             <p>The next two are on the proxy, so they're shared by everyone who uses the site:</p>
@@ -121,7 +120,7 @@
         <section>
             <h2>The Shared Database</h2>
             <p>
-                The shared database is the part that matters most. When anyone's browser needs a position nobody has asked for yet, the proxy fetches it from Josekipedia and saves the answer.
+                When anyone's browser needs a position nobody has asked for yet, the proxy fetches it from Josekipedia and saves the answer.
                 For the next year, everyone else who needs that position gets the saved copy.
             </p>
             <figure class="diagram">
@@ -163,9 +162,9 @@
                 <figcaption>Only the first request for a position reaches Josekipedia. Everyone after that gets the saved copy.</figcaption>
             </figure>
             <p>
-                This puts a ceiling on how much the site can ever ask for.
+                This limits how much the site can ask for in total.
                 Josekipedia's tree has about 220,000 positions. Even if visitors between them asked for every one, Josekipedia would see each request at most once a year, which is around 600 a day.
-                The number is much lower in practice, because most practice happens in the same well-known joseki, and positions there get saved early and reused constantly.
+                The number is much lower in practice, because most practice happens in the same well-known joseki, and positions there get saved early and reused often.
             </p>
             <p>
                 The numbers so far match this. In its first day (14 to 15 October 2026), the shared database saved 1,101 positions, and the proxy sent 1,087 requests to Josekipedia: about one per position.
@@ -211,7 +210,7 @@
                     <rect class="d-box d-key" x="485" y="85" width="145" height="60" rx="8"/>
                     <text class="d-text d-key-text" x="557" y="120" text-anchor="middle">Josekipedia</text>
                 </svg>
-                <figcaption>All three get the same answer, from a single request to Josekipedia.</figcaption>
+                <figcaption>All three get the same answer, from one request to Josekipedia.</figcaption>
             </figure>
         </section>
 
@@ -255,10 +254,10 @@
                     <text class="d-text" x="450" y="165">this walk</text>
                     <text class="d-note" x="418" y="210">Common positions near the top</text>
                     <text class="d-note" x="418" y="228">are saved early, so most of a</text>
-                    <text class="d-note" x="418" y="246">walk's steps cost Josekipedia</text>
-                    <text class="d-note" x="418" y="264">nothing.</text>
+                    <text class="d-note" x="418" y="246">walk's steps don't need a</text>
+                    <text class="d-note" x="418" y="264">request to Josekipedia.</text>
                 </svg>
-                <figcaption>Only the new positions along a walk can reach Josekipedia, and each one only once.</figcaption>
+                <figcaption>New positions along a walk are fetched from Josekipedia once each. The rest are already saved.</figcaption>
             </figure>
             <p>
                 A search can take several walks, since some walks end before reaching a usable position.
@@ -298,8 +297,8 @@
         <section>
             <h2>Contact</h2>
             <p>
-                If you run Josekipedia and would like this site to change how it uses your data, whether that's lower limits, a different way of fetching, or something else, please <a href="https://github.com/LuxBetancourt/Joseki-Practice/issues">open an issue on GitHub</a> or get in touch, and I'll change it.
-                And thank you for making Josekipedia.
+                If you run Josekipedia and want this site to change how it uses your data, please <a href="https://github.com/LuxBetancourt/Joseki-Practice/issues">open an issue on GitHub</a> or get in touch, and I'll change it.
+                Thanks for making Josekipedia.
             </p>
         </section>
     </main>
