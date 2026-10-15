@@ -1324,13 +1324,16 @@ function gradePath(i) {
 // --- Follow-up variations ----------------------------------------------------
 
 const lineCache = new Map() // child node id -> Promise<main line result>
+// Follow-up lines stop here (longer ones show their shape so far): it bounds the lookups per card,
+// and is far longer than any Final Shape line, so transpositions are still recognized
+const FOLLOW_UP_LENGTH = 20
 let followUpsKey = null
 
 /** The main line after playing `child` from `position`, cached by node. */
 function lineAfter(child, position) {
     if (!lineCache.has(child.id)) {
         const promise = getNode(child.id).then((node) =>
-            mainLine({ node, position: position.playSgf(child.move, child.color), getNode }))
+            mainLine({ node, position: position.playSgf(child.move, child.color), getNode, maxLength: FOLLOW_UP_LENGTH }))
         promise.catch(() => lineCache.delete(child.id))
         lineCache.set(child.id, promise)
     }
@@ -1420,6 +1423,7 @@ function renderProblemBar() {
 
     $('#show-answer').disabled = !problemPending() || busy
     $('#explore-problem').disabled = busy
+    $('#next-problem').disabled = findingProblem()
     if (findingProblem()) { return } // The last problem's tag and prompt stay up, greyed out
 
     $('#problem-kind').textContent = problem ? PROBLEM_TYPE_NAMES[problem.kind] + (problem.reviewKey ? ' · Review' : '') : ''
@@ -1866,7 +1870,8 @@ function bindControls() {
     })
     $('#show-answer').addEventListener('click', revealAnswer)
     $('#explore-problem').addEventListener('click', exploreFromHere)
-    $('#next-problem').addEventListener('click', () => newProblem())
+    // Ignored while a search is running: a second one would start while the first kept fetching
+    $('#next-problem').addEventListener('click', () => { if (!findingProblem()) { newProblem() } })
     // Reviews become due over time, so keep the counts fresh
     setInterval(() => {
         renderReviewStatus()
@@ -1889,7 +1894,7 @@ function bindControls() {
             ArrowLeft: undo,
             ArrowRight: redo,
             h: () => $('[data-setting="showMoves"]').click(),
-            n: () => { if (settings.mode !== 'explore') { newProblem() } },
+            n: () => { if (settings.mode !== 'explore' && !findingProblem()) { newProblem() } },
         }
         const action = actions[e.key]
         if (action) {

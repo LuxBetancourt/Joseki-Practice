@@ -56,9 +56,9 @@ function normalizeFull(raw) {
 
 // --- Caching -----------------------------------------------------------------
 // To put as little load on Josekipedia as possible, every node is kept: in memory for the visit,
-// and in IndexedDB (far roomier than localStorage) for STORAGE_TTL. The proxy caches them too.
+// and in IndexedDB (far roomier than localStorage) for STORAGE_TTL. The proxy keeps them too.
 
-const STORAGE_TTL = 180 * 24 * 60 * 60 * 1000 // Joseki data rarely changes
+const STORAGE_TTL = 365 * 24 * 60 * 60 * 1000 // Joseki data rarely changes
 const LEGACY_PREFIX = 'jp-node:v1:' // The old localStorage cache, cleared out on first use
 const memory = new Map() // id -> Promise<node>
 let database = null
@@ -68,10 +68,12 @@ function openDatabase() {
     database ??= new Promise((resolve, reject) => {
         const request = indexedDB.open('joseki-practice', 1)
         request.onupgradeneeded = () => request.result.createObjectStore('nodes')
-        request.onsuccess = () => resolve(request.result)
+        request.onsuccess = () => {
+            clearLegacyCache() // Once per visit, not on every lookup
+            resolve(request.result)
+        }
         request.onerror = () => reject(request.error)
     })
-    database.then(clearLegacyCache, () => {})
     return database
 }
 

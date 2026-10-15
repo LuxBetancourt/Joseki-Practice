@@ -53,7 +53,9 @@ export async function mainLine({ node, position, getNode, maxLength = MAX_LENGTH
         states.push({ node, position })
         position = position.play(point.x, point.y, next.color)
         moves.push({ move: next.move, color: next.color })
-        node = await getNode(next.id)
+        // At the limit, the move's summary (labels and comment, no children) stands in for its
+        // node: the line stops here anyway, so its children would never be read
+        node = moves.length < maxLength ? await getNode(next.id) : next
     }
     return { moves, position, node, states, ended }
 }

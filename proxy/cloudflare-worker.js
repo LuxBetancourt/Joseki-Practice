@@ -12,14 +12,19 @@
 //   2. a D1 database shared by every location (env.DB), so a node is fetched from Josekipedia
 //      once for everyone, then kept for STORE_SECONDS (the free plan allows 100,000 new nodes a
 //      day, and the whole of Josekipedia fits comfortably)
-//   3. Josekipedia itself, only if neither has it
+//   3. Josekipedia itself, only if neither has it; simultaneous requests for the same node share
+//      one fetch
 // The X-Joseki-Cache response header says which one answered (edge, d1 or origin).
 //
 // Every step can fail without failing the request: if the database is unavailable or over a
 // limit, nodes still come from the cache or from Josekipedia.
 
 const EDGE_SECONDS = 60 * 60 * 24 * 30
-const STORE_SECONDS = 60 * 60 * 24 * 180
+const STORE_SECONDS = 60 * 60 * 24 * 365 // Joseki data rarely changes
+
+// Fetches from Josekipedia in progress, by node id, so simultaneous requests share one (within
+// this instance of the Worker, which is where requests arriving together usually land)
+const pending = new Map()
 
 export default {
     async fetch(request, env, ctx) {
@@ -63,18 +68,38 @@ export default {
         }
 
         // 3. Josekipedia
-        const upstream = await fetch(`https://www.josekipedia.com/db/node.php?id=${id}&pid=0`)
-        const body = upstream.ok ? await upstream.text() : null
-        if (!body || !isNode(body)) {
+        if (!pending.has(id)) {
+            const fetching = fetchNode(id).then((body) => {
+                if (body) {
+                    ctx.waitUntil(Promise.all([
+                        cache.put(cacheKey, respond(body, 'edge')).catch(() => {}),
+                        env.DB?.prepare('INSERT OR REPLACE INTO nodes (id, body, fetched) VALUES (?, ?, ?)')
+                            .bind(id, body, now).run().catch(() => {}),
+                    ]))
+                }
+                return body
+            }).finally(() => pending.delete(id))
+            pending.set(id, fetching)
+            ctx.waitUntil(fetching) // Finishes even if this request is cancelled, for the others waiting on it
+        }
+        const body = await pending.get(id)
+        if (!body) {
             return new Response('Upstream error', { status: 502, headers: cors }) // Never cache errors
         }
-        ctx.waitUntil(Promise.all([
-            cache.put(cacheKey, respond(body, 'edge')).catch(() => {}),
-            env.DB?.prepare('INSERT OR REPLACE INTO nodes (id, body, fetched) VALUES (?, ?, ?)')
-                .bind(id, body, now).run().catch(() => {}),
-        ]))
         return respond(body, 'origin')
     },
+}
+
+/** A node's JSON from Josekipedia, or null if it didn't send one. */
+async function fetchNode(id) {
+    try {
+        const upstream = await fetch(`https://www.josekipedia.com/db/node.php?id=${id}&pid=0`)
+        const body = upstream.ok ? await upstream.text() : null
+        return body && isNode(body) ? body : null
+    }
+    catch {
+        return null
+    }
 }
 
 function isNode(body) {

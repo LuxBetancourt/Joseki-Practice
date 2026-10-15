@@ -228,8 +228,11 @@ async function pathOptions(chosen, main, { getNode, random }) {
     for (const { step, child } of shuffle(deviations, random).slice(0, MAX_DEVIATIONS_CHECKED)) {
         if (options.length >= PATH_OPTIONS) { break }
         const state = main.states[step]
-        const rest = await mainLine({ node: await getNode(child.id), position: state.position.playSgf(child.move, child.color), getNode })
         // Keep it about as long as the correct line, so length doesn't give the answer away
+        const rest = await mainLine({
+            node: await getNode(child.id), position: state.position.playSgf(child.move, child.color), getNode,
+            maxLength: main.moves.length + 1 - step,
+        })
         const line = [...main.moves.slice(0, step), { move: child.move, color: child.color }, ...rest.moves]
             .slice(0, main.moves.length + 2)
         addOption(line, { step, move: child.move, color: child.color, type: child.type })
@@ -287,7 +290,7 @@ export async function rebuildProblem({ kind, moves, color, data }, { getNode, ra
             let line = data.line
             if (!line) {
                 const child = node.children.find((c) => c.move === data.answer && c.color === color) || stale('shape')
-                const rest = await mainLine({ node: await getNode(child.id), position: position.playSgf(child.move, child.color), getNode })
+                const rest = await mainLine({ node: await getNode(child.id), position: position.playSgf(child.move, child.color), getNode, maxLength: MAX_SHAPE_LINE })
                 line = [{ move: child.move, color: child.color }, ...rest.moves]
             }
             const target = playLine(position, line) || stale('shape')
@@ -323,7 +326,7 @@ export async function rebuildProblem({ kind, moves, color, data }, { getNode, ra
  * pathOptions makes them: a recorded mistake continues as Josekipedia does, a made-up one stops.
  */
 async function pathFromPicks(start, picks, getNode) {
-    const main = await mainLine({ ...start, getNode })
+    const main = await mainLine({ ...start, getNode, maxLength: MAX_PATH_LINE + 1 })
     const options = [{ line: main.moves }]
     for (const { step, move, stops } of picks) {
         const state = main.states[step]
@@ -332,7 +335,7 @@ async function pathFromPicks(start, picks, getNode) {
         const known = state.node.children.find((child) => child.move === move && child.color === color)
         let line = [...main.moves.slice(0, step), { move, color }]
         if (!stops && known) {
-            const rest = await mainLine({ node: await getNode(known.id), position: state.position.playSgf(move, color), getNode })
+            const rest = await mainLine({ node: await getNode(known.id), position: state.position.playSgf(move, color), getNode, maxLength: main.moves.length + 1 - step })
             line = [...line, ...rest.moves].slice(0, main.moves.length + 2)
         }
         options.push({ line, mistake: { step, move, color, type: known ? known.type : null } })
@@ -745,9 +748,9 @@ export async function problemAt(kind, moves, { color, firstTen = false, getNode,
             if (choices.length < 2) { return none(`${side} needs a choice of joseki moves here`) }
             for (const child of choices) {
                 const after = await step(state, child, getNode)
-                const rest = await mainLine({ node: after.node, position: after.position, getNode })
+                const rest = await mainLine({ node: after.node, position: after.position, getNode, maxLength: MAX_SHAPE_LINE })
                 const line = [{ move: child.move, color: child.color }, ...rest.moves]
-                if (line.length <= MAX_SHAPE_LINE && line.filter((m) => m.color === toPlay).length >= 2) {
+                if (line.length <= MAX_SHAPE_LINE && rest.ended !== 'length' && line.filter((m) => m.color === toPlay).length >= 2) {
                     return { problem: { moves, answers, answer: child.move, line, target: rest.position, color: toPlay } }
                 }
             }
@@ -755,7 +758,7 @@ export async function problemAt(kind, moves, { color, firstTen = false, getNode,
         }
         case 'path': {
             if (!josekiMoves(node, position, false).length) { return none(`No joseki move for ${side} here`) }
-            const main = await mainLine({ node, position, getNode })
+            const main = await mainLine({ node, position, getNode, maxLength: MAX_PATH_LINE + 1 })
             if (main.moves.length < MIN_PATH_LINE || main.moves.length > MAX_PATH_LINE) { return none('The joseki from here is too short or too long') }
             const options = await pathOptions(state, main, { getNode, random })
             if (!options) { return none('Not enough other sequences from here') }
