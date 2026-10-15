@@ -60,6 +60,25 @@ header {
 }
 h1 { margin: 0; }
 
+/* The light/dark toggle (js/theme.js), at the far end of the header */
+#theme-toggle {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 2rem;
+    height: 2rem;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--button);
+    color: var(--text);
+    cursor: pointer;
+}
+.theme-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-icon.moon { fill: currentColor; stroke: none; }
+:root[data-theme="dark"] .theme-icon.moon, :root:not([data-theme="dark"]) .theme-icon.sun { display: none; }
+
 #back-button {
     background: var(--button);
     border: 1px solid var(--border);
