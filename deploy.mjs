@@ -16,7 +16,7 @@ const dryRun = process.argv.includes('--dry-run')
 const OBSOLETE = ['index.js', 'profile_fetcher.js']
 
 async function siteFiles() {
-    const files = ['index.html', 'about.html', 'reviews.html', 'index.css', 'about.css', 'reviews.css']
+    const files = ['index.html', 'about.html', 'reviews.html', 'josekipedia-load.html', 'index.css', 'about.css', 'reviews.css']
     for (const dir of ['js', 'resources']) {
         for (const name of await readdir(join(root, dir))) { files.push(`${dir}/${name}`) }
     }

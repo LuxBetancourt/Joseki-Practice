@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Load on Josekipedia · Joseki Practice</title>
+    <meta name="description" content="How Joseki Practice keeps the number of requests it sends to Josekipedia small.">
+    <!-- Link previews in chat apps and social sites (image: tools/make-preview.mjs) -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Joseki Practice">
+    <meta property="og:title" content="Load on Josekipedia · Joseki Practice">
+    <meta property="og:description" content="How Joseki Practice keeps the number of requests it sends to Josekipedia small.">
+    <meta property="og:url" content="https://josekipractice.neocities.org/josekipedia-load.html">
+    <meta property="og:image" content="https://josekipractice.neocities.org/resources/preview.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Joseki Practice: the Avalanche joseki on a go board, beside the seven problem types">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#2e7d4f">
+    <link rel="icon" href="resources/favicon.ico">
+    <link rel="stylesheet" href="about.css">
+</head>
+<body>
+    <header>
+        <a id="back-button" href="about.html" aria-label="Back to About">← About</a>
+        <h1>Load on Josekipedia</h1>
+    </header>
+    <main>
+        <section>
+            <h2>Why This Page Exists</h2>
+            <p>
+                Every position on this site comes from <a href="https://www.josekipedia.com">Josekipedia</a>, a free joseki dictionary that its users write together.
+                Josekipedia was built for people browsing it by hand, and a practice site that generates endless problems could easily send it far more requests than that.
+                I want this site to be a good neighbor, so it saves everything it gets and asks for as little as it can.
+                This page goes through how that works.
+            </p>
+        </section>
+
+        <section>
+            <h2>What the Site Asks For</h2>
+            <p>
+                Josekipedia stores its joseki as a tree. Each point in the tree is a position, and its record lists the moves that can follow, how good each one is, and any comments and labels.
+                This site asks for one of these records at a time, by its number, the same way Josekipedia's own pages do. A record is usually under a kilobyte.
+            </p>
+            <p>
+                Browsers don't let one website read another site's data unless that site allows it, and Josekipedia doesn't. So the site's requests go through a small proxy that runs on Cloudflare.
+                The proxy is also where the most important saving happens, as the next sections show.
+            </p>
+        </section>
+
+        <section>
+            <h2>Where a Position Comes From</h2>
+            <p>
+                When the site needs a position, it checks the places below in order and stops at the first one that has it.
+                Josekipedia is only asked when none of them do.
+            </p>
+            <figure class="diagram">
+                <svg viewBox="0 0 640 492" role="img" aria-labelledby="layers-title layers-desc">
+                    <title id="layers-title">Where a position comes from</title>
+                    <desc id="layers-desc">Six places in order: memory, saved in your browser for a year, the browser cache for 30 days, Cloudflare's cache for 30 days, the shared database for a year, and finally Josekipedia.</desc>
+                    <defs>
+                        <marker id="layers-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead" d="M0 0L10 5L0 10z"/></marker>
+                    </defs>
+                    <!-- Group labels -->
+                    <path class="d-bracket" d="M150 22V202"/>
+                    <text class="d-group" x="138" y="117" text-anchor="end">In your</text>
+                    <text class="d-group" x="138" y="137" text-anchor="end">browser</text>
+                    <path class="d-bracket" d="M150 250V358"/>
+                    <text class="d-group" x="138" y="300" text-anchor="end">On the</text>
+                    <text class="d-group" x="138" y="320" text-anchor="end">proxy</text>
+
+                    <rect class="d-box" x="170" y="20" width="460" height="48" rx="8"/>
+                    <text class="d-text" x="186" y="50">Memory</text>
+                    <text class="d-note" x="614" y="50" text-anchor="end">while the page is open</text>
+                    <path class="d-arrow" d="M400 68V90" marker-end="url(#layers-arrow)"/>
+
+                    <rect class="d-box" x="170" y="92" width="460" height="48" rx="8"/>
+                    <text class="d-text" x="186" y="122">Saved in your browser</text>
+                    <text class="d-note" x="614" y="122" text-anchor="end">kept for a year</text>
+                    <path class="d-arrow" d="M400 140V162" marker-end="url(#layers-arrow)"/>
+
+                    <rect class="d-box" x="170" y="164" width="460" height="48" rx="8"/>
+                    <text class="d-text" x="186" y="194">Browser cache</text>
+                    <text class="d-note" x="614" y="194" text-anchor="end">kept for 30 days</text>
+                    <path class="d-arrow" d="M400 212V246" marker-end="url(#layers-arrow)"/>
+
+                    <rect class="d-box" x="170" y="248" width="460" height="48" rx="8"/>
+                    <text class="d-text" x="186" y="278">Cloudflare's cache</text>
+                    <text class="d-note" x="614" y="278" text-anchor="end">30 days, per Cloudflare location</text>
+                    <path class="d-arrow" d="M400 296V318" marker-end="url(#layers-arrow)"/>
+
+                    <rect class="d-box" x="170" y="320" width="460" height="48" rx="8"/>
+                    <text class="d-text" x="186" y="350">Shared database</text>
+                    <text class="d-note" x="614" y="350" text-anchor="end">a year, for every visitor</text>
+                    <path class="d-arrow" d="M400 368V412" marker-end="url(#layers-arrow)"/>
+                    <text class="d-note" x="414" y="396">only if nothing above has it</text>
+
+                    <rect class="d-box d-key" x="170" y="414" width="460" height="56" rx="8"/>
+                    <text class="d-text d-key-text" x="186" y="448">Josekipedia</text>
+                    <text class="d-note" x="614" y="448" text-anchor="end">the copy is saved on the way back</text>
+                </svg>
+                <figcaption>Each request stops at the first place that has the position.</figcaption>
+            </figure>
+            <p>The first three are in your own browser:</p>
+            <ul>
+                <li><strong>Memory</strong> holds every position the page has used since you opened it.</li>
+                <li><strong>Saved in your browser</strong> keeps every position you've used for a year, so coming back to the site the next day costs Josekipedia nothing for positions you've seen.</li>
+                <li><strong>The browser cache</strong> is the browser's ordinary store for downloaded files. The proxy tells it to keep positions for 30 days.</li>
+            </ul>
+            <p>The next two are on the proxy, so they're shared by everyone who uses the site:</p>
+            <ul>
+                <li><strong>Cloudflare's cache</strong> keeps positions for 30 days in each of the data centers Cloudflare runs. It's fast, but each data center has its own copy.</li>
+                <li><strong>The shared database</strong> is a single store that every Cloudflare location reads from. It keeps each position for a year.</li>
+            </ul>
+            <p>
+                The empty board is a special case. Every game and every problem starts there, so its record (about 20 KB, with all the opening moves) is part of the site's own files.
+                The site never asks the proxy or Josekipedia for it.
+            </p>
+        </section>
+
+        <section>
+            <h2>One Request per Position, for Everyone</h2>
+            <p>
+                The shared database is the part that matters most. When anyone's browser needs a position nobody has asked for yet, the proxy fetches it from Josekipedia and saves the answer.
+                For the next year, everyone else who needs that position gets the saved copy.
+            </p>
+            <figure class="diagram">
+                <svg viewBox="0 0 640 300" role="img" aria-labelledby="shared-title shared-desc">
+                    <title id="shared-title">One request per position, for everyone</title>
+                    <desc id="shared-desc">Four visitors on different days ask the proxy for the same position. Only the first visitor's request goes on to Josekipedia; the other three get the copy saved in the shared database.</desc>
+                    <defs>
+                        <marker id="shared-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead" d="M0 0L10 5L0 10z"/></marker>
+                        <marker id="shared-arrow-key" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead-key" d="M0 0L10 5L0 10z"/></marker>
+                    </defs>
+                    <rect class="d-box" x="10" y="20" width="170" height="50" rx="8"/>
+                    <text class="d-text" x="24" y="44">Visitor A</text>
+                    <text class="d-note" x="24" y="62">Monday</text>
+                    <rect class="d-box" x="10" y="88" width="170" height="50" rx="8"/>
+                    <text class="d-text" x="24" y="112">Visitor B</text>
+                    <text class="d-note" x="24" y="130">Tuesday</text>
+                    <rect class="d-box" x="10" y="156" width="170" height="50" rx="8"/>
+                    <text class="d-text" x="24" y="180">Visitor C</text>
+                    <text class="d-note" x="24" y="198">the next week</text>
+                    <rect class="d-box" x="10" y="224" width="170" height="50" rx="8"/>
+                    <text class="d-text" x="24" y="248">Visitor D</text>
+                    <text class="d-note" x="24" y="266">months later</text>
+
+                    <path class="d-arrow d-arrow-key" d="M180 45C220 45 225 147 258 147" marker-end="url(#shared-arrow-key)"/>
+                    <path class="d-arrow" d="M180 113C220 113 225 147 258 147" marker-end="url(#shared-arrow)"/>
+                    <path class="d-arrow" d="M180 181C220 181 225 147 258 147" marker-end="url(#shared-arrow)"/>
+                    <path class="d-arrow" d="M180 249C220 249 225 147 258 147" marker-end="url(#shared-arrow)"/>
+
+                    <rect class="d-box" x="260" y="112" width="170" height="70" rx="8"/>
+                    <text class="d-text" x="345" y="142" text-anchor="middle">Proxy and</text>
+                    <text class="d-text" x="345" y="162" text-anchor="middle">shared database</text>
+
+                    <path class="d-arrow d-arrow-key" d="M430 147H488" marker-end="url(#shared-arrow-key)"/>
+                    <text class="d-note" x="459" y="135" text-anchor="middle">once</text>
+
+                    <rect class="d-box d-key" x="490" y="117" width="140" height="60" rx="8"/>
+                    <text class="d-text d-key-text" x="560" y="152" text-anchor="middle">Josekipedia</text>
+                </svg>
+                <figcaption>Only the first request for a position reaches Josekipedia. Everyone after that gets the saved copy.</figcaption>
+            </figure>
+            <p>
+                This puts a ceiling on how much the site can ever ask for.
+                Josekipedia's tree has about 220,000 positions. Even if visitors between them asked for every one, Josekipedia would see each request at most once a year, which is around 600 a day.
+                The number is much lower in practice, because most practice happens in the same well-known joseki, and positions there get saved early and reused constantly.
+            </p>
+            <p>
+                The numbers so far match this. In its first day (14 to 15 October 2026), the shared database saved 1,101 positions, and the proxy sent 1,087 requests to Josekipedia: about one per position.
+                As the database fills up, more and more requests are answered from it, and fewer go to Josekipedia.
+            </p>
+            <p>
+                Saved copies are refreshed after a year, in case Josekipedia's editors have changed something. A position is only fetched again when someone needs it, so old copies don't all expire and get refetched at once.
+            </p>
+        </section>
+
+        <section>
+            <h2>Requests That Arrive Together</h2>
+            <p>
+                Two people can need the same new position at the same moment, for example if they're both working through the same joseki.
+                If the second request arrives while the proxy is still waiting on Josekipedia for the first, it waits for that answer and uses it too.
+                Cloudflare runs many copies of the proxy, and this works within each copy, which is where requests arriving together usually land.
+            </p>
+            <figure class="diagram">
+                <svg viewBox="0 0 640 230" role="img" aria-labelledby="together-title together-desc">
+                    <title id="together-title">Requests that arrive together share one fetch</title>
+                    <desc id="together-desc">Three requests for the same new position reach the proxy at about the same time. The proxy sends one request to Josekipedia and gives the answer to all three.</desc>
+                    <defs>
+                        <marker id="together-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead" d="M0 0L10 5L0 10z"/></marker>
+                        <marker id="together-arrow-key" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead-key" d="M0 0L10 5L0 10z"/></marker>
+                    </defs>
+                    <rect class="d-box" x="10" y="20" width="170" height="44" rx="8"/>
+                    <text class="d-text" x="95" y="47" text-anchor="middle">Request 1</text>
+                    <rect class="d-box" x="10" y="93" width="170" height="44" rx="8"/>
+                    <text class="d-text" x="95" y="120" text-anchor="middle">Request 2</text>
+                    <rect class="d-box" x="10" y="166" width="170" height="44" rx="8"/>
+                    <text class="d-text" x="95" y="193" text-anchor="middle">Request 3</text>
+
+                    <path class="d-arrow" d="M180 42C215 42 220 115 253 115" marker-end="url(#together-arrow)"/>
+                    <path class="d-arrow" d="M180 115H253" marker-end="url(#together-arrow)"/>
+                    <path class="d-arrow" d="M180 188C215 188 220 115 253 115" marker-end="url(#together-arrow)"/>
+
+                    <rect class="d-box" x="255" y="85" width="150" height="60" rx="8"/>
+                    <text class="d-text" x="330" y="120" text-anchor="middle">Proxy</text>
+
+                    <path class="d-arrow d-arrow-key" d="M405 115H483" marker-end="url(#together-arrow-key)"/>
+                    <text class="d-note" x="444" y="103" text-anchor="middle">one request</text>
+
+                    <rect class="d-box d-key" x="485" y="85" width="145" height="60" rx="8"/>
+                    <text class="d-text d-key-text" x="557" y="120" text-anchor="middle">Josekipedia</text>
+                </svg>
+                <figcaption>All three get the same answer, from a single request to Josekipedia.</figcaption>
+            </figure>
+        </section>
+
+        <section>
+            <h2>How Problems Are Found, and Their Limits</h2>
+            <p>
+                Problems are made by walking down Josekipedia's tree along a random joseki line, one move at a time, until the walk reaches a position that makes a good problem of the chosen type.
+                Each step of the walk needs the next position's record.
+            </p>
+            <figure class="diagram">
+                <svg viewBox="0 0 640 300" role="img" aria-labelledby="walk-title walk-desc">
+                    <title id="walk-title">A problem search walking the tree</title>
+                    <desc id="walk-desc">A tree of positions. A walk goes from the empty board down one branch. Positions near the top are already saved; the deeper ones on the path are new and are each fetched once.</desc>
+                    <!-- Branches -->
+                    <path class="d-edge" d="M200 34L90 104M200 34L200 104M200 34L310 104M90 104L50 174M90 104L130 174M200 104L170 174M200 104L240 174M310 104L290 174M310 104L350 174M240 174L210 244M240 174L270 244M130 174L130 244"/>
+                    <!-- The walk -->
+                    <path class="d-walk" d="M200 34L200 104L240 174L270 244"/>
+                    <!-- Saved positions (filled) and new ones (outlined) -->
+                    <circle class="d-node-saved" cx="200" cy="34" r="12"/>
+                    <circle class="d-node-saved" cx="90" cy="104" r="12"/>
+                    <circle class="d-node-saved d-on-walk" cx="200" cy="104" r="12"/>
+                    <circle class="d-node-saved" cx="310" cy="104" r="12"/>
+                    <circle class="d-node-saved" cx="50" cy="174" r="12"/>
+                    <circle class="d-node-new" cx="130" cy="174" r="12"/>
+                    <circle class="d-node-saved" cx="170" cy="174" r="12"/>
+                    <circle class="d-node-new d-on-walk" cx="240" cy="174" r="12"/>
+                    <circle class="d-node-saved" cx="290" cy="174" r="12"/>
+                    <circle class="d-node-new" cx="350" cy="174" r="12"/>
+                    <circle class="d-node-new" cx="130" cy="244" r="12"/>
+                    <circle class="d-node-new" cx="210" cy="244" r="12"/>
+                    <circle class="d-node-new d-on-walk" cx="270" cy="244" r="12"/>
+                    <text class="d-note" x="222" y="38">empty board</text>
+                    <text class="d-note" x="292" y="266">the problem</text>
+
+                    <!-- Legend -->
+                    <circle class="d-node-saved" cx="430" cy="80" r="10"/>
+                    <text class="d-text" x="450" y="85">already saved</text>
+                    <circle class="d-node-new" cx="430" cy="120" r="10"/>
+                    <text class="d-text" x="450" y="125">new, fetched once</text>
+                    <path class="d-walk" d="M418 160H442"/>
+                    <text class="d-text" x="450" y="165">this walk</text>
+                    <text class="d-note" x="418" y="210">Common positions near the top</text>
+                    <text class="d-note" x="418" y="228">are saved early, so most of a</text>
+                    <text class="d-note" x="418" y="246">walk's steps cost Josekipedia</text>
+                    <text class="d-note" x="418" y="264">nothing.</text>
+                </svg>
+                <figcaption>Only the new positions along a walk can reach Josekipedia, and each one only once.</figcaption>
+            </figure>
+            <p>
+                A search can take several walks, since some walks end before reaching a usable position.
+                With nothing saved yet, a search looks up about 70 positions on average. Once your browser has saved the common ones, most searches download only a few, and practicing with reviews downloads none.
+                The site also limits what a search may ask for:
+            </p>
+            <ul>
+                <li><strong>A budget per search.</strong> A search stops starting new walks once it has downloaded 120 positions. This only affects unusual searches, like looking for a rare problem type from a starting point where it barely occurs.</li>
+                <li><strong>One search at a time.</strong> The <em>Next</em> button is greyed out while a search runs, so impatient clicking can't start several searches at once.</li>
+                <li><strong>Lines followed only as far as needed.</strong> Several problem types follow a joseki to its end. Each one stops at the longest line it can use, so it doesn't fetch positions it would throw away.</li>
+                <li><strong>Checks only when asked.</strong> <em>Add to Review</em> in Explore mode only checks the more expensive problem types when you pick one.</li>
+                <li><strong>Small, bounded extras.</strong> For problems that depend on a ladder, the site may look ahead up to 25 positions to see where the ladder runs. It reads the joseki comments first, which often show the ladder already, and only looks ahead when they don't.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Things the Site Doesn't Do</h2>
+            <ul>
+                <li>
+                    <strong>It doesn't fetch positions ahead of time.</strong> Downloading the positions around each step of a walk in advance would make the first searches faster, but it would also ask Josekipedia for many positions that never get used.
+                    So searches are slower at first, and speed up as the shared database fills.
+                </li>
+                <li><strong>It doesn't copy Josekipedia wholesale.</strong> Positions are only fetched when someone's practice needs them.</li>
+                <li><strong>It doesn't ask for anything else.</strong> The site only requests position records. It doesn't load Josekipedia's pages, images or search.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>While Working on the Site</h2>
+            <p>
+                Development creates load too, since testing means loading lots of problems.
+                The local development server keeps every position it fetches in a folder on disk, so testing never asks Josekipedia for the same position twice, even across days.
+                The automated tests don't contact Josekipedia at all. They run against small made-up trees.
+            </p>
+        </section>
+
+        <section>
+            <h2>If You Run Josekipedia</h2>
+            <p>
+                Thank you for making it. If you'd like this site to change how it uses Josekipedia's data, whether that's lower limits, a different way of fetching, or something else, please <a href="https://github.com/LuxBetancourt/Joseki-Practice/issues">open an issue on GitHub</a> or get in touch, and I'll change it.
+            </p>
+        </section>
+    </main>
+</body>
+</html>

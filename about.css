@@ -86,3 +86,32 @@ kbd {
     border-radius: 3px;
     padding: 0 .3em;
 }
+
+/* Diagrams (josekipedia-load.html): inline SVG, colored from the page's tokens so they follow the theme */
+.diagram { margin: 1.2rem 0; }
+.diagram svg { display: block; width: 100%; height: auto; }
+.diagram figcaption { margin-top: .4rem; color: var(--muted); font-size: .9rem; text-align: center; }
+.diagram text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.d-text { fill: var(--text); font-size: 15px; }
+.d-note { fill: var(--muted); font-size: 13px; }
+.d-group { fill: var(--muted); font-size: 14px; font-weight: 600; }
+.d-box { fill: var(--button); stroke: var(--border); stroke-width: 1.5; }
+.d-key { stroke: var(--accent); stroke-width: 2; }
+.d-key-text { fill: var(--accent); font-weight: 700; }
+.d-arrow { fill: none; stroke: var(--muted); stroke-width: 2; }
+.d-arrow-key { stroke: var(--accent); stroke-width: 2.5; }
+.d-arrowhead { fill: var(--muted); }
+.d-arrowhead-key { fill: var(--accent); }
+.d-bracket { fill: none; stroke: var(--border); stroke-width: 3; stroke-linecap: round; }
+.d-edge { fill: none; stroke: var(--border); stroke-width: 2; }
+.d-walk { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.d-node-saved { fill: var(--muted); }
+.d-node-new { fill: var(--panel); stroke: var(--muted); stroke-width: 2.5; }
+.d-on-walk { stroke: var(--accent); stroke-width: 3.5; }
+/* Phones: shrunk to fit, the labels would be too small to read, so the diagram keeps a readable
+   size and scrolls sideways within the page */
+@media (max-width: 600px) {
+    .diagram { overflow-x: auto; margin-inline: -1rem; padding: 0 1rem .4rem; }
+    .diagram svg { min-width: 540px; }
+    .diagram figcaption { position: sticky; left: 0; width: min(100%, calc(100vw - 4rem)); }
+}
