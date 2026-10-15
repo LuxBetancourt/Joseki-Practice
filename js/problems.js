@@ -157,9 +157,9 @@ export async function generateFinalShape({ startMoves, color, firstTen, getNode,
         for (const child of shuffle(josekiMoves(state.node, state.position, firstTen), random)) {
             if (++checked > MAX_LINES_CHECKED) { return null }
             const after = await step(state, child, getNode)
-            const rest = await mainLine({ node: after.node, position: after.position, getNode })
+            const rest = await mainLine({ node: after.node, position: after.position, getNode, maxLength: MAX_SHAPE_LINE })
             const line = [{ move: child.move, color: child.color }, ...rest.moves]
-            if (line.length <= MAX_SHAPE_LINE && line.filter((m) => m.color === color).length >= 2) {
+            if (line.length <= MAX_SHAPE_LINE && rest.ended !== 'length' && line.filter((m) => m.color === color).length >= 2) {
                 return { moves: state.moves, answers: answerTypes(state.node, color), answer: child.move, line, target: rest.position }
             }
         }
@@ -197,7 +197,7 @@ export async function generatePickPath({ startMoves, color, firstTen, getNode, r
     // Deepest first, find a position whose main line is a sensible length and that has enough
     // wrong sequences to go with it
     for (const state of candidates.reverse().slice(0, MAX_LINES_CHECKED)) {
-        const main = await mainLine({ node: state.node, position: state.position, getNode })
+        const main = await mainLine({ node: state.node, position: state.position, getNode, maxLength: MAX_PATH_LINE + 1 })
         if (main.moves.length < MIN_PATH_LINE || main.moves.length > MAX_PATH_LINE) { continue }
         const options = await pathOptions(state, main, { getNode, random })
         if (options) { return { moves: state.moves, line: main.moves, options } }
@@ -367,15 +367,14 @@ function senteAt(node, position, ended) {
  */
 async function senteOptions(state, getNode) {
     const color = state.position.toPlay
-    const options = []
-    for (const child of josekiMoves(state.node, state.position, false)) {
+    // Each choice is followed at the same time, and only one move past the longest usable line
+    return Promise.all(josekiMoves(state.node, state.position, false).map(async (child) => {
         const after = await step(state, child, getNode)
-        const rest = await mainLine({ node: after.node, position: after.position, getNode })
+        const rest = await mainLine({ node: after.node, position: after.position, getNode, maxLength: MAX_SENTE_LINE })
         const line = [{ move: child.move, color }, ...rest.moves]
         const owner = line.length > MAX_SENTE_LINE ? null : senteAt(rest.node, rest.position, rest.ended)
-        options.push({ move: child.move, type: child.type, line, sente: owner === null ? null : owner === color })
-    }
-    return options
+        return { move: child.move, type: child.type, line, sente: owner === null ? null : owner === color }
+    }))
 }
 
 /** The joseki moves for the side to play after `moves`, and whether each ends with that side in sente (see senteOptions). */

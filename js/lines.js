@@ -23,13 +23,14 @@ function isNearStones(position, point) {
  * Returns { moves: [{ move, color }], position, node, states, ended }, where states[i] is the
  * { node, position } before moves[i], and `ended` says why it stopped: 'settled', 'tenuki' (the
  * next ideal move), 'elsewhere' (it's far away), 'end' (nothing more is recorded), 'unclear' (no
- * ideal move among what is), 'illegal' or 'length'.
+ * ideal move among what is), 'illegal' or 'length' (more than `maxLength` moves: callers that can't
+ * use longer lines pass it, so as not to look up nodes they'd throw away).
  */
-export async function mainLine({ node, position, getNode }) {
+export async function mainLine({ node, position, getNode, maxLength = MAX_LENGTH }) {
     const moves = []
     const states = []
     let ended = 'length'
-    while (moves.length < MAX_LENGTH) {
+    while (moves.length < maxLength) {
         if (node.labels.includes(SETTLED_LABEL)) {
             ended = 'settled'
             break

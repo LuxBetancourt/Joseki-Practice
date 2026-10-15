@@ -548,10 +548,10 @@ async function newProblem() {
     freePlay = false
     if (!history.length) { setupPosition([]) }
     clearToasts()
-    setBusy(true)
 
     const options = { startMoves: splitPath(startPath()), color: humanColor(), firstTen: settings.firstTen, getNode }
     try {
+        setBusy(true) // Inside the try, so that even a failure here can't leave it searching forever
         let found = null
         let kind = null
         let reviewKey = null
@@ -867,7 +867,8 @@ function showMarks() {
 
 function renderPathStartMarks() {
     const svg = $('#path-choices:not([hidden]) .path-start svg')
-    if (!svg) { return }
+    // While the next problem is found, the last one's cards stay up, but there's no problem to mark
+    if (!svg || !problem) { return }
     let layer = svg.querySelector('.marks')
     if (!layer) {
         layer = document.createElementNS('http://www.w3.org/2000/svg', 'g')
@@ -1989,8 +1990,8 @@ async function loadSharedProblem(spec, link, previousPlayer, reviewKey) {
     freePlay = false
     if (!history.length) { setupPosition([]) }
     clearToasts()
-    setBusy(true)
     try {
+        setBusy(true)
         const found = await rebuildProblem(spec, { getNode })
         const ladder = await findLadderSetup(found, spec.kind)
         if (gen !== generation) { return }
