@@ -22,21 +22,19 @@
 
     color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg: #1b1a18;
-        --panel: #262421;
-        --text: #e8e4dc;
-        --muted: #a39d92;
-        --border: #3b3833;
-        --accent: #3f9d66;
-        --accent-hover: #4cb276;
-        --button: #34312c;
-        --button-hover: #403c36;
-        --wood: #c9a35b;
-        --mark: #2cc6e0;
-        color-scheme: dark;
-    }
+:root[data-theme="dark"] {
+    --bg: #1b1a18;
+    --panel: #262421;
+    --text: #e8e4dc;
+    --muted: #a39d92;
+    --border: #3b3833;
+    --accent: #3f9d66;
+    --accent-hover: #4cb276;
+    --button: #34312c;
+    --button-hover: #403c36;
+    --wood: #c9a35b;
+    --mark: #2cc6e0;
+    color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -119,9 +117,12 @@ kbd {
     opacity: .8;
 }
 .icon-link:hover { opacity: 1; background: var(--button-hover); }
-@media (prefers-color-scheme: dark) {
-    .github img { filter: invert(1); }
-}
+:root[data-theme="dark"] .github img { filter: invert(1); }
+.header-actions { display: flex; gap: .5rem; }
+button.icon-link { padding: 0; border: none; font: inherit; cursor: pointer; }
+.theme-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-icon.moon { fill: currentColor; stroke: none; }
+:root[data-theme="dark"] .theme-icon.moon, :root:not([data-theme="dark"]) .theme-icon.sun { display: none; }
 
 /* --- Layout ---------------------------------------------------------------- */
 

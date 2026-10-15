@@ -8,17 +8,15 @@
     --button: #ece7dc;
     color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg: #1b1a18;
-        --panel: #262421;
-        --text: #e8e4dc;
-        --muted: #a39d92;
-        --border: #3b3833;
-        --accent: #4cb276;
-        --button: #34312c;
-        color-scheme: dark;
-    }
+:root[data-theme="dark"] {
+    --bg: #1b1a18;
+    --panel: #262421;
+    --text: #e8e4dc;
+    --muted: #a39d92;
+    --border: #3b3833;
+    --accent: #4cb276;
+    --button: #34312c;
+    color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -122,12 +120,10 @@ kbd {
     --d-proxy: #b9741f; --d-proxy-fill: #f7e6cf;
     --d-source-fill: #dcefe2;
 }
-@media (prefers-color-scheme: dark) {
-    :root {
-        --d-browser: #74a6e6; --d-browser-fill: #22324a;
-        --d-proxy: #e2a352; --d-proxy-fill: #3e2f1d;
-        --d-source-fill: #1f3a2a;
-    }
+:root[data-theme="dark"] {
+    --d-browser: #74a6e6; --d-browser-fill: #22324a;
+    --d-proxy: #e2a352; --d-proxy-fill: #3e2f1d;
+    --d-source-fill: #1f3a2a;
 }
 .d-browser { fill: var(--d-browser-fill); stroke: var(--d-browser); }
 .d-proxy { fill: var(--d-proxy-fill); stroke: var(--d-proxy); }
