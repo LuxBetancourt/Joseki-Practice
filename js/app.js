@@ -644,7 +644,16 @@ function presentProblem(found, kind, { reviewKey = null, color = humanColor(), l
     ++generation
     // Pick the Path shows cards rather than the board, so there's nothing to play out
     if (settings.replaySetup && found.moves.length && kind !== 'path') { replayMoves() }
-    else { advance() }
+    else {
+        advance()
+        showAnswerButtons()
+    }
+}
+
+/** Tenuki-able? is answered with the buttons below the board, so bring them into view if they aren't. */
+function showAnswerButtons() {
+    if (problem?.kind !== 'tenuki') { return }
+    requestAnimationFrame(() => $('#answer-choices').scrollIntoView({ block: 'nearest', behavior: 'smooth' }))
 }
 
 // --- Playing out a problem's moves ------------------------------------------------
@@ -679,6 +688,7 @@ function finishReplay() {
     current = problem.index
     ++generation
     advance()
+    showAnswerButtons()
 }
 
 /** Loads info for the current position, gives feedback and lets the computer reply if it's its turn. */
