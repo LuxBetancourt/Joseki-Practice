@@ -860,3 +860,36 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 #board-area.finding #problem-text,
 #board-area.finding #answer-choices,
 #board-area.finding #path-choices { opacity: .4; transition: opacity .15s; }
+
+/* --- Light mode ----------------------------------------------------------------
+   The colors above suit dark mode. On light backgrounds, beige buttons on white panels looked
+   muddy and the bright problem-type colors looked loud, so light mode gets its own versions. */
+
+:root:not([data-theme="dark"]) {
+    --button: #ffffff;
+    --button-hover: #f3efe7;
+    --border: #d8d0c1;
+    accent-color: var(--accent); /* Checkboxes and radio buttons in the site's green */
+}
+:root:not([data-theme="dark"]) button:not(.icon-link, .link),
+:root:not([data-theme="dark"]) .icon-link {
+    box-shadow: 0 1px 2px rgba(70, 50, 20, .1);
+}
+:root:not([data-theme="dark"]) button:disabled { box-shadow: none; }
+
+/* Deeper, less saturated type colors, with white text where they're a solid fill */
+:root:not([data-theme="dark"]) [data-kind] { --kind-text: white; }
+:root:not([data-theme="dark"]) [data-kind="next"] { --kind: #167a6b; }
+:root:not([data-theme="dark"]) [data-kind="punish"] { --kind: #bb3a4c; }
+:root:not([data-theme="dark"]) [data-kind="shape"] { --kind: #2f66b3; }
+:root:not([data-theme="dark"]) [data-kind="path"] { --kind: #7646bd; }
+:root:not([data-theme="dark"]) [data-kind="better"] { --kind: #bd5d18; }
+:root:not([data-theme="dark"]) [data-kind="tenuki"] { --kind: #ad4192; }
+:root:not([data-theme="dark"]) [data-kind="sente"] { --kind: #9a7710; }
+
+/* The type tag as a tinted chip */
+:root:not([data-theme="dark"]) #board-area[data-kind] #problem-kind {
+    background: color-mix(in srgb, var(--kind) 13%, white);
+    border-color: color-mix(in srgb, var(--kind) 45%, white);
+    color: color-mix(in srgb, var(--kind) 80%, black);
+}
