@@ -227,36 +227,38 @@
                     <path class="d-edge" d="M200 34L90 104M200 34L200 104M200 34L310 104M90 104L50 174M90 104L130 174M200 104L170 174M200 104L240 174M310 104L290 174M310 104L350 174M240 174L210 244M240 174L270 244M130 174L130 244"/>
                     <!-- The walk -->
                     <path class="d-walk" d="M200 34L200 104L240 174L270 244"/>
-                    <!-- Saved positions (filled) and new ones (outlined) -->
+                    <!-- Saved positions (blue), the ones the walk fetches (green), the rest (outlined) -->
                     <circle class="d-node-saved" cx="200" cy="34" r="12"/>
                     <circle class="d-node-saved" cx="90" cy="104" r="12"/>
-                    <circle class="d-node-saved d-on-walk" cx="200" cy="104" r="12"/>
+                    <circle class="d-node-saved" cx="200" cy="104" r="12"/>
                     <circle class="d-node-saved" cx="310" cy="104" r="12"/>
                     <circle class="d-node-saved" cx="50" cy="174" r="12"/>
                     <circle class="d-node-new" cx="130" cy="174" r="12"/>
                     <circle class="d-node-saved" cx="170" cy="174" r="12"/>
-                    <circle class="d-node-new d-on-walk" cx="240" cy="174" r="12"/>
+                    <circle class="d-node-fetched" cx="240" cy="174" r="12"/>
                     <circle class="d-node-saved" cx="290" cy="174" r="12"/>
                     <circle class="d-node-new" cx="350" cy="174" r="12"/>
                     <circle class="d-node-new" cx="130" cy="244" r="12"/>
                     <circle class="d-node-new" cx="210" cy="244" r="12"/>
-                    <circle class="d-node-new d-on-walk" cx="270" cy="244" r="12"/>
+                    <circle class="d-node-fetched" cx="270" cy="244" r="12"/>
                     <text class="d-note" x="222" y="38">empty board</text>
                     <text class="d-note" x="292" y="266">the problem</text>
 
                     <!-- Legend -->
-                    <circle class="d-node-saved" cx="430" cy="80" r="10"/>
-                    <text class="d-text" x="450" y="85">saved</text>
-                    <circle class="d-node-new" cx="430" cy="120" r="10"/>
-                    <text class="d-text" x="450" y="125">not saved yet</text>
-                    <path class="d-walk" d="M418 160H442"/>
-                    <text class="d-text" x="450" y="165">the walk</text>
-                    <text class="d-note" x="418" y="210">Common positions near the top</text>
-                    <text class="d-note" x="418" y="228">are saved early, so most of a</text>
-                    <text class="d-note" x="418" y="246">walk's steps don't need a</text>
-                    <text class="d-note" x="418" y="264">request to Josekipedia.</text>
+                    <circle class="d-node-saved" cx="430" cy="64" r="10"/>
+                    <text class="d-text" x="450" y="69">saved</text>
+                    <circle class="d-node-fetched" cx="430" cy="100" r="10"/>
+                    <text class="d-text" x="450" y="105">fetched from Josekipedia</text>
+                    <circle class="d-node-new" cx="430" cy="136" r="10"/>
+                    <text class="d-text" x="450" y="141">not saved yet</text>
+                    <path class="d-walk" d="M418 172H442"/>
+                    <text class="d-text" x="450" y="177">the walk</text>
+                    <text class="d-note" x="418" y="218">Common positions near the top</text>
+                    <text class="d-note" x="418" y="236">are saved early, so most of a</text>
+                    <text class="d-note" x="418" y="254">walk's steps don't need a</text>
+                    <text class="d-note" x="418" y="272">request to Josekipedia.</text>
                 </svg>
-                <figcaption>The walk fetches the two positions that weren't saved yet. The other two come from saved copies.</figcaption>
+                <figcaption>The walk fetches the two green positions from Josekipedia. The two blue ones come from saved copies.</figcaption>
             </figure>
             <p>
                 A search can take several walks, since some walks end before reaching a usable position.

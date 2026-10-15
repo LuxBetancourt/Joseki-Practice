@@ -104,10 +104,10 @@ kbd {
 .d-arrowhead-key { fill: var(--accent); }
 .d-bracket { fill: none; stroke: var(--border); stroke-width: 3; stroke-linecap: round; }
 .d-edge { fill: none; stroke: var(--border); stroke-width: 2; }
-.d-walk { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.d-walk { fill: none; stroke: var(--text); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
 .d-node-saved { fill: var(--muted); }
 .d-node-new { fill: var(--panel); stroke: var(--muted); stroke-width: 2.5; }
-.d-on-walk { stroke: var(--accent); stroke-width: 3.5; }
+.d-node-fetched { fill: var(--accent); }
 /* Phones: shrunk to fit, the labels would be too small to read, so the diagram keeps a readable
    size and scrolls sideways within the page */
 @media (max-width: 600px) {
