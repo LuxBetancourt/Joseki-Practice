@@ -56,7 +56,7 @@
             <figure class="diagram">
                 <svg viewBox="0 0 640 492" role="img" aria-labelledby="layers-title layers-desc">
                     <title id="layers-title">Caching</title>
-                    <desc id="layers-desc">Six places in order: memory, saved in your browser for a year, the browser cache for 30 days, Cloudflare's cache for 30 days, the shared database for a year, and finally Josekipedia.</desc>
+                    <desc id="layers-desc">Six places, checked in order: memory until you close the page, saved in your browser for 1 year, the browser cache for 30 days, Cloudflare's cache for 30 days in each location, the shared database for 1 year, and then Josekipedia.</desc>
                     <defs>
                         <marker id="layers-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="d-arrowhead" d="M0 0L10 5L0 10z"/></marker>
                     </defs>
@@ -70,33 +70,32 @@
 
                     <rect class="d-box" x="170" y="20" width="460" height="48" rx="8"/>
                     <text class="d-text" x="186" y="50">Memory</text>
-                    <text class="d-note" x="614" y="50" text-anchor="end">while the page is open</text>
+                    <text class="d-note" x="614" y="50" text-anchor="end">until you close the page</text>
                     <path class="d-arrow" d="M400 68V90" marker-end="url(#layers-arrow)"/>
 
                     <rect class="d-box" x="170" y="92" width="460" height="48" rx="8"/>
                     <text class="d-text" x="186" y="122">Saved in your browser</text>
-                    <text class="d-note" x="614" y="122" text-anchor="end">kept for a year</text>
+                    <text class="d-note" x="614" y="122" text-anchor="end">1 year</text>
                     <path class="d-arrow" d="M400 140V162" marker-end="url(#layers-arrow)"/>
 
                     <rect class="d-box" x="170" y="164" width="460" height="48" rx="8"/>
                     <text class="d-text" x="186" y="194">Browser cache</text>
-                    <text class="d-note" x="614" y="194" text-anchor="end">kept for 30 days</text>
+                    <text class="d-note" x="614" y="194" text-anchor="end">30 days</text>
                     <path class="d-arrow" d="M400 212V246" marker-end="url(#layers-arrow)"/>
 
                     <rect class="d-box" x="170" y="248" width="460" height="48" rx="8"/>
                     <text class="d-text" x="186" y="278">Cloudflare's cache</text>
-                    <text class="d-note" x="614" y="278" text-anchor="end">30 days, per Cloudflare location</text>
+                    <text class="d-note" x="614" y="278" text-anchor="end">30 days in each location</text>
                     <path class="d-arrow" d="M400 296V318" marker-end="url(#layers-arrow)"/>
 
                     <rect class="d-box" x="170" y="320" width="460" height="48" rx="8"/>
                     <text class="d-text" x="186" y="350">Shared database</text>
-                    <text class="d-note" x="614" y="350" text-anchor="end">a year, for every visitor</text>
+                    <text class="d-note" x="614" y="350" text-anchor="end">1 year</text>
                     <path class="d-arrow" d="M400 368V412" marker-end="url(#layers-arrow)"/>
-                    <text class="d-note" x="414" y="396">only if nothing above has it</text>
+                    <text class="d-note" x="414" y="396">if none of these have it</text>
 
                     <rect class="d-box d-key" x="170" y="414" width="460" height="56" rx="8"/>
                     <text class="d-text d-key-text" x="186" y="448">Josekipedia</text>
-                    <text class="d-note" x="614" y="448" text-anchor="end">the copy is saved on the way back</text>
                 </svg>
                 <figcaption>Each request stops at the first place that has the position.</figcaption>
             </figure>
@@ -153,13 +152,13 @@
                     <text class="d-text" x="345" y="142" text-anchor="middle">Proxy and</text>
                     <text class="d-text" x="345" y="162" text-anchor="middle">shared database</text>
 
-                    <path class="d-arrow d-arrow-key" d="M430 147H488" marker-end="url(#shared-arrow-key)"/>
-                    <text class="d-note" x="459" y="135" text-anchor="middle">once</text>
+                    <path class="d-arrow d-arrow-key" d="M430 147H513" marker-end="url(#shared-arrow-key)"/>
+                    <text class="d-note" x="472" y="137" text-anchor="middle">A's request</text>
 
-                    <rect class="d-box d-key" x="490" y="117" width="140" height="60" rx="8"/>
-                    <text class="d-text d-key-text" x="560" y="152" text-anchor="middle">Josekipedia</text>
+                    <rect class="d-box d-key" x="515" y="117" width="120" height="60" rx="8"/>
+                    <text class="d-text d-key-text" x="575" y="152" text-anchor="middle">Josekipedia</text>
                 </svg>
-                <figcaption>Only the first request for a position reaches Josekipedia. Everyone after that gets the saved copy.</figcaption>
+                <figcaption>Visitor A's request goes on to Josekipedia. B, C and D get the copy saved from it.</figcaption>
             </figure>
             <p>
                 This limits how much the site can ask for in total.
@@ -223,7 +222,7 @@
             <figure class="diagram">
                 <svg viewBox="0 0 640 300" role="img" aria-labelledby="walk-title walk-desc">
                     <title id="walk-title">A problem search</title>
-                    <desc id="walk-desc">A tree of positions. A walk goes from the empty board down one branch. Positions near the top are already saved; the deeper ones on the path are new and are each fetched once.</desc>
+                    <desc id="walk-desc">A tree of positions. A walk goes from the empty board down one branch to the problem. The first two positions on it are saved; the last two aren't, so they're fetched from Josekipedia.</desc>
                     <!-- Branches -->
                     <path class="d-edge" d="M200 34L90 104M200 34L200 104M200 34L310 104M90 104L50 174M90 104L130 174M200 104L170 174M200 104L240 174M310 104L290 174M310 104L350 174M240 174L210 244M240 174L270 244M130 174L130 244"/>
                     <!-- The walk -->
@@ -247,17 +246,17 @@
 
                     <!-- Legend -->
                     <circle class="d-node-saved" cx="430" cy="80" r="10"/>
-                    <text class="d-text" x="450" y="85">already saved</text>
+                    <text class="d-text" x="450" y="85">saved</text>
                     <circle class="d-node-new" cx="430" cy="120" r="10"/>
-                    <text class="d-text" x="450" y="125">new, fetched once</text>
+                    <text class="d-text" x="450" y="125">not saved yet</text>
                     <path class="d-walk" d="M418 160H442"/>
-                    <text class="d-text" x="450" y="165">this walk</text>
+                    <text class="d-text" x="450" y="165">the walk</text>
                     <text class="d-note" x="418" y="210">Common positions near the top</text>
                     <text class="d-note" x="418" y="228">are saved early, so most of a</text>
                     <text class="d-note" x="418" y="246">walk's steps don't need a</text>
                     <text class="d-note" x="418" y="264">request to Josekipedia.</text>
                 </svg>
-                <figcaption>New positions along a walk are fetched from Josekipedia once each. The rest are already saved.</figcaption>
+                <figcaption>The walk fetches the two positions that weren't saved yet. The other two come from saved copies.</figcaption>
             </figure>
             <p>
                 A search can take several walks, since some walks end before reaching a usable position.
