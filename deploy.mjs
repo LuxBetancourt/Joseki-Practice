@@ -3,8 +3,10 @@
 // Get the API key from https://neocities.org/settings (Manage Site Settings -> API).
 
 import { readFile, readdir } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { versionAssets } from './tools/version-assets.mjs'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 const API = 'https://neocities.org/api'
@@ -40,8 +42,11 @@ if (config.includes('REPLACE-ME')) {
 }
 
 const files = await siteFiles()
+// Scripts, stylesheets and data get a version in their address (see tools/version-assets.mjs)
+const versioned = versionAssets(files, (path) => readFileSync(join(root, path), 'utf8'))
 if (dryRun) {
     console.log('Would upload:', files.join(', '))
+    console.log('With versioned addresses in:', [...versioned.keys()].join(', '))
     console.log('Would delete if present:', OBSOLETE.join(', '))
     process.exit(0)
 }
@@ -52,7 +57,7 @@ if (!process.env.NEOCITIES_API_KEY) {
 
 const form = new FormData()
 for (const file of files) {
-    form.append(file, new Blob([await readFile(join(root, file))]), file)
+    form.append(file, new Blob([versioned.get(file) ?? await readFile(join(root, file))]), file)
 }
 await api('upload', { method: 'POST', body: form })
 console.log(`Uploaded ${files.length} files.`)
