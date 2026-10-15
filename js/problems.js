@@ -364,26 +364,33 @@ function senteAt(node, position, ended) {
 }
 
 /**
- * Each joseki move for the side to play, followed to the end of its main line: whether that side
- * ends with sente (true), gote (false) or Josekipedia doesn't say (null).
- * Returns [{ move, type, line: [{ move, color }], sente }].
+ * A joseki move for the side to play, followed to the end of its main line (and only one move
+ * past the longest usable line): whether that side ends with sente (true), gote (false) or
+ * Josekipedia doesn't say (null). Returns { move, type, line: [{ move, color }], sente }.
  */
-async function senteOptions(state, getNode) {
+async function senteOption(state, child, getNode) {
     const color = state.position.toPlay
-    // Each choice is followed at the same time, and only one move past the longest usable line
-    return Promise.all(josekiMoves(state.node, state.position, false).map(async (child) => {
-        const after = await step(state, child, getNode)
-        const rest = await mainLine({ node: after.node, position: after.position, getNode, maxLength: MAX_SENTE_LINE })
-        const line = [{ move: child.move, color }, ...rest.moves]
-        const owner = line.length > MAX_SENTE_LINE ? null : senteAt(rest.node, rest.position, rest.ended)
-        return { move: child.move, type: child.type, line, sente: owner === null ? null : owner === color }
-    }))
+    const after = await step(state, child, getNode)
+    const rest = await mainLine({ node: after.node, position: after.position, getNode, maxLength: MAX_SENTE_LINE })
+    const line = [{ move: child.move, color }, ...rest.moves]
+    const owner = line.length > MAX_SENTE_LINE ? null : senteAt(rest.node, rest.position, rest.ended)
+    return { move: child.move, type: child.type, line, sente: owner === null ? null : owner === color }
 }
 
-/** The joseki moves for the side to play after `moves`, and whether each ends with that side in sente (see senteOptions). */
-export async function senteOptionsAt(moves, { getNode }) {
+/**
+ * Each joseki move for the side to play, as senteOption, followed at the same time. (Stopping at
+ * the first unclear one was measured: it saved almost no lookups, as most go into the walk, and
+ * made searches slower.)
+ */
+function senteOptions(state, getNode) {
+    return Promise.all(josekiMoves(state.node, state.position, false).map((child) => senteOption(state, child, getNode)))
+}
+
+/** One joseki move after `moves`, as senteOption (for a move that leaves the problem's line), or null if it isn't one. */
+export async function senteOptionAt(moves, move, { getNode }) {
     const state = await replay(moves, getNode)
-    return (await senteOptions(state, getNode)).map(({ move, type, line, sente }) => ({ move, type, line, sente }))
+    const child = josekiMoves(state.node, state.position, false).find((c) => c.move === move)
+    return child ? senteOption(state, child, getNode) : null
 }
 
 /** A Play for Sente position: some joseki moves end in sente for the player, the others in gote. */

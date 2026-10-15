@@ -1,7 +1,7 @@
 import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
-import { getNode, prefetch, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
+import { getNode, prefetch, downloadCount, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import {
-    generateNextMove, generatePunish, generateFinalShape, generatePickPath, generateWhosBetter, generateTenuki, generateSente, senteOptionsAt,
+    generateNextMove, generatePunish, generateFinalShape, generatePickPath, generateWhosBetter, generateTenuki, generateSente, senteOptionAt,
     problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup,
 } from './problems.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
@@ -169,6 +169,10 @@ const enabledProblemTypes = () => Object.keys(GENERATORS).filter((kind) => setti
 const deck = new ReviewDeck()
 const REVIEW_MIX = 1 / 3 // Chance that Next serves a due review instead of a new problem
 const TRIES_PER_TYPE = 4 // Random walks a problem type gets before Next moves on to another type
+// A search stops starting new walks once it has fetched this many nodes over the network. Typical
+// searches need fewer (about 70 lookups on a cold cache, 110 at most, and nearly none once warm);
+// this only stops a search from wandering on where the problem types are scarce.
+const SEARCH_DOWNLOAD_BUDGET = 120
 const startPath = () => (settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start)
 const dueReviews = () => (settings.mode === 'review'
     ? deck.due()
@@ -400,7 +404,7 @@ async function gradeSenteAnswer(coord) {
             type = history[at].node?.children.find((c) => c.move === coord && c.color === humanColor())?.type ?? null
             if (type === MoveType.IDEAL || type === MoveType.GOOD) {
                 const moves = history.slice(1, at + 1).map((entry) => entry.move.coord)
-                option = (await senteOptionsAt(moves, { getNode })).find((o) => o.move === coord) || null
+                option = await senteOptionAt(moves, coord, { getNode })
             }
         }
         catch { /* Couldn't check: treat it as not keeping sente */ }
@@ -589,7 +593,9 @@ async function newProblem() {
         const kinds = enabledProblemTypes()
         const order = orderKinds(kinds, recentKinds)
         let repeat = null
-        for (let attempt = 0; attempt < TRIES_PER_TYPE * 4 && !found && gen === generation; ++attempt) {
+        const startDownloads = downloadCount()
+        const withinBudget = () => downloadCount() - startDownloads < SEARCH_DOWNLOAD_BUDGET
+        for (let attempt = 0; attempt < TRIES_PER_TYPE * 4 && !found && gen === generation && withinBudget(); ++attempt) {
             kind = order[Math.floor(attempt / TRIES_PER_TYPE) % order.length]
             const candidate = await GENERATORS[kind](options)
             if (candidate && seenProblems.has(seenKey(kind, candidate.moves))) { repeat ??= { candidate, kind } }
@@ -1479,47 +1485,68 @@ function closeAddMenu() {
 }
 
 /** Opens the menu of problem types, then checks which ones this position can be. */
+// Checking these follows whole joseki lines, so they're only checked when picked; the others
+// use nodes already loaded for the position, so they're checked as the menu opens
+const CHECKED_WHEN_PICKED = ['shape', 'path', 'sente']
+
 async function openAddMenu() {
     const entry = currentEntry()
     addMenuFor = entry
     const menu = $('#add-review-menu')
     $('#add-review').setAttribute('aria-expanded', 'true')
     menu.hidden = false
+    const moves = splitPath(entry.path)
     const items = Object.keys(GENERATORS).map((kind) => {
         const item = document.createElement('button')
         item.type = 'button'
-        item.disabled = true
         item.setAttribute('role', 'menuitem')
         const name = Object.assign(document.createElement('span'), { className: 'menu-name', textContent: PROBLEM_TYPE_NAMES[kind] })
-        const note = Object.assign(document.createElement('span'), { className: 'menu-note', textContent: 'Checking…' })
+        const note = Object.assign(document.createElement('span'), { className: 'menu-note' })
         item.append(name, note)
         return { kind, item, note }
     })
     menu.replaceChildren(...items.map(({ item }) => item))
 
-    const moves = splitPath(entry.path)
-    await Promise.all(items.map(async ({ kind, item, note }) => {
+    /** Checks whether this position can be a `kind` problem; returns the review to add, or shows why not. */
+    const check = async ({ kind, item, note }) => {
+        item.disabled = true
+        note.textContent = 'Checking…'
         let result
         try { result = await problemAt(kind, moves, { color: humanColor(), firstTen: settings.firstTen, getNode }) }
         catch { result = { why: 'Couldn’t check this position' } }
-        if (addMenuFor !== entry) { return } // Closed, or moved on
+        if (addMenuFor !== entry) { return null } // Closed, or moved on
         if (!result.problem) {
             note.textContent = result.why
-            return
+            return null
         }
         const spec = { kind, moves, color: result.problem.color, data: problemData(kind, result.problem) }
         if (deck.find(reviewKey(spec))) {
             note.textContent = 'Already in Review ✓'
-            return
+            return null
         }
         note.textContent = ''
         item.disabled = false
-        item.addEventListener('click', () => {
-            deck.add(spec)
-            closeAddMenu()
-            toast(`Added to Review as a ${PROBLEM_TYPE_NAMES[kind]} problem.`, 'success')
-            render()
-        })
+        return spec
+    }
+    const add = (kind, spec) => {
+        deck.add(spec)
+        closeAddMenu()
+        toast(`Added to Review as a ${PROBLEM_TYPE_NAMES[kind]} problem.`, 'success')
+        render()
+    }
+
+    await Promise.all(items.map(async (choice) => {
+        const { kind, item, note } = choice
+        if (CHECKED_WHEN_PICKED.includes(kind)) {
+            note.textContent = 'Click to check'
+            item.addEventListener('click', async () => {
+                const spec = await check(choice)
+                if (spec) { add(kind, spec) }
+            }, { once: true })
+            return
+        }
+        const spec = await check(choice)
+        if (spec) { item.addEventListener('click', () => add(kind, spec)) }
     }))
     menu.querySelector('button:not(:disabled)')?.focus()
 }

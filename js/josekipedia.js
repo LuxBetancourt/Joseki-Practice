@@ -108,7 +108,13 @@ function writeStorage(id, raw) {
         .catch(() => { /* storage unavailable or full: the memory cache still works */ })
 }
 
+let downloads = 0
+
+/** How many nodes this visit has fetched over the network (not from a cache in the browser). */
+export const downloadCount = () => downloads
+
 async function download(id) {
+    ++downloads
     const response = await fetch(NODE_URL.replace('{id}', encodeURIComponent(id)), {
         signal: AbortSignal.timeout(15000),
     })
