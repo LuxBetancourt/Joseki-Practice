@@ -4,6 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "node dev-server.mjs",
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "node --test \"test/*.test.mjs\"",
+    "deploy": "node deploy.mjs",
+    "deploy:proxy": "cd proxy && npx wrangler deploy",
+    "root-node": "node tools/update-root-node.mjs",
+    "preview": "node tools/make-preview.mjs"
   }
 }
