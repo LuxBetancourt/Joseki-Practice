@@ -4,6 +4,8 @@ import {
     GENERATORS, senteOptionAt, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup,
 } from './problems.js'
 import { PROBLEM_KINDS, KINDS, byKind } from './problem-kinds.js'
+import { loadSettings, saveSettings as storeSettings } from './settings.js'
+import { readJson, writeJson, isObject } from './storage.js'
 import { ReviewDeck, reviewKey, relativeTime } from './reviews.js'
 import { orderKinds, addRecentKind, seenKey, addSeen } from './problem-mix.js'
 import { mainLine } from './lines.js'
@@ -18,94 +20,27 @@ const $ = (selector) => document.querySelector(selector)
 
 // --- Settings ------------------------------------------------------------------
 
-// Bumped when a change to the defaults should reach settings saved before it (see loadSettings)
-const SETTINGS_VERSION = 2
-
-const DEFAULT_SETTINGS = {
-    version: SETTINGS_VERSION,
-    mode: 'problems', // 'explore' | 'problems' | 'review'
-    problemTypes: byKind(() => true),
-    player: 'black',
-    ideal: true, good: false, bad: false, trick: false, question: false,
-    firstTen: true,
-    onlyPassIfJoseki: false,
-    showMoves: false,
-    showMoveInfo: true,
-    showFollowUps: false,
-    autoAdvance: false, // Go to the next problem automatically after solving one
-    shapeBothSides: true, // In Final Shape, the player plays the other side's moves too
-    replaySetup: false, // Play each problem's moves out from an empty board before it starts
-    expanded: [], // Starting-point branches the player has expanded
-    start: 'empty',
-}
-
-function loadSettings() {
-    try {
-        const saved = JSON.parse(localStorage.getItem('settings'))
-        if (saved) {
-            // Next Move, Punish and Final Shape used to be separate modes, and Explore was Practice
-            if (['next', 'punish', 'shape'].includes(saved.mode)) { saved.mode = 'problems' }
-            if (saved.mode === 'practice') { saved.mode = 'explore' }
-            // Version 2: Final Shape's Play both sides became on by default
-            if (!(saved.version >= 2)) { saved.shapeBothSides = true }
-            saved.version = SETTINGS_VERSION
-            return { ...DEFAULT_SETTINGS, ...saved, problemTypes: { ...DEFAULT_SETTINGS.problemTypes, ...saved.problemTypes } }
-        }
-
-        // Migrate settings saved by the previous version of the site
-        const legacy = {}
-        const map = { ideal: 'ideal', good: 'good', bad: 'bad', trick: 'trick', question: 'question', firstTen: 'firstTen', noPass: 'onlyPassIfJoseki', showMoveInfo: 'showMoveInfo' }
-        for (const [oldKey, newKey] of Object.entries(map)) {
-            const value = localStorage.getItem(oldKey)
-            if (value !== null) { legacy[newKey] = value === 'true' }
-        }
-        if (['black', 'white'].includes(localStorage.getItem('player'))) { legacy.player = localStorage.getItem('player') }
-        return { ...DEFAULT_SETTINGS, ...legacy }
-    }
-    catch {
-        return { ...DEFAULT_SETTINGS }
-    }
-}
-
-function saveSettings() {
-    try { localStorage.setItem('settings', JSON.stringify(settings)) }
-    catch { /* storage unavailable */ }
-}
+const { settings, changed: settingsChanged } = loadSettings()
+const saveSettings = () => storeSettings(settings)
+if (settingsChanged) { saveSettings() } // Brought up to date (see settings.js): keep it that way
 
 // The types of the last few problems (oldest first), so types that haven't come up lately can be
-// favored (see problem-mix.js). Kept across visits, as a session is often only a few problems.
-// The problems seen lately (see problem-mix.js) are kept the same way.
-const loadList = (key) => {
-    try {
-        const saved = JSON.parse(localStorage.getItem(key))
-        return Array.isArray(saved) ? saved.filter((item) => typeof item === 'string') : []
-    }
-    catch { return [] }
-}
-const saveList = (key, list) => {
-    try { localStorage.setItem(key, JSON.stringify(list)) }
-    catch { /* storage unavailable */ }
-}
+// favored, and the problems seen lately, so they aren't served again soon (see problem-mix.js).
+// Kept across visits, as a session is often only a few problems.
+const loadList = (key) => readJson(key, [], { valid: Array.isArray }).filter((item) => typeof item === 'string')
 let recentKinds = loadList('recentKinds')
 let seenProblems = new Set(loadList('seenProblems'))
 // How many times each problem type's banner has been shown, so it can get quicker (see showTypeBanner)
-const bannerViews = (() => {
-    try {
-        const saved = JSON.parse(localStorage.getItem('bannerViews'))
-        return saved && typeof saved === 'object' ? saved : {}
-    }
-    catch { return {} }
-})()
+const bannerViews = readJson('bannerViews', {}, { valid: isObject })
 
 function noteShown(kind, moves) {
     recentKinds = addRecentKind(recentKinds, kind)
-    saveList('recentKinds', recentKinds)
+    writeJson('recentKinds', recentKinds)
     const seen = addSeen([...seenProblems], seenKey(kind, moves))
     seenProblems = new Set(seen)
-    saveList('seenProblems', seen)
+    writeJson('seenProblems', seen)
 }
 
-const settings = loadSettings()
 // In Review mode the player takes the color they missed the problem with
 const humanColor = () => (settings.mode === 'review' && problem ? problem.spec.color : settings.player === 'black' ? BLACK : WHITE)
 
@@ -1015,8 +950,7 @@ function showTypeBanner(kind, review) {
     const views = Number.isInteger(bannerViews[kind]) ? bannerViews[kind] : 0
     banner.style.setProperty('--banner-time', `${bannerTime(views)}ms`)
     bannerViews[kind] = views + 1
-    try { localStorage.setItem('bannerViews', JSON.stringify(bannerViews)) }
-    catch { /* storage unavailable: it just won't speed up next visit */ }
+    writeJson('bannerViews', bannerViews) // If storage is unavailable, it just won't speed up next visit
     banner.dataset.kind = kind
     banner.querySelector('.type-banner-name').textContent = PROBLEM_TYPE_NAMES[kind]
     banner.querySelector('.type-banner-goal').textContent = review ? `Review · ${PROBLEM_TYPE_GOALS[kind]}` : PROBLEM_TYPE_GOALS[kind]

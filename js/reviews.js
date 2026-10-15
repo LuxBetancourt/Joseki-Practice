@@ -2,6 +2,7 @@
 // to rebuild its problem (kind, moves, color and kind-specific data) plus its schedule.
 
 import { KINDS } from './problem-kinds.js'
+import { readJson, writeJson } from './storage.js'
 
 const STORAGE_KEY = 'reviews:v1'
 const MINUTE = 60 * 1000
@@ -31,14 +32,12 @@ export class ReviewDeck {
     constructor({ storage = globalThis.localStorage, now = () => Date.now() } = {}) {
         this.storage = storage
         this.now = now
-        this.items = []
-        try { this.items = JSON.parse(storage?.getItem(STORAGE_KEY)) || [] }
-        catch { /* storage unavailable or corrupt: start empty */ }
+        // If storage is unavailable or corrupt, the deck starts empty, and still works for this session
+        this.items = readJson(STORAGE_KEY, [], { storage, valid: Array.isArray })
     }
 
     save() {
-        try { this.storage?.setItem(STORAGE_KEY, JSON.stringify(this.items)) }
-        catch { /* storage unavailable: the deck still works for this session */ }
+        writeJson(STORAGE_KEY, this.items, { storage: this.storage })
     }
 
     get size() { return this.items.length }
