@@ -2,7 +2,9 @@
 
 import { SIZE, EMPTY, opponent } from './go.js'
 
-const MAX_READ = 4000 // Positions a single reading may visit, so a tangled fight can't run away
+// Positions a single reading may visit, so a tangled fight can't hold up the page: a ladder across
+// the whole board visits about 100
+const MAX_READ = 500
 const LONG_LADDER = 6 // Runner moves before a ladder counts as reaching across the board
 const NEAR = 2 // How far from the ladder move to look for replies that start a ladder
 
@@ -133,7 +135,15 @@ export function findLadder(after, x, y, more = []) {
             if (reply) { best = longer(ladderNear(reply, nx, ny), best) }
         }
     }
-    for (const extra of more) { best = longer(ladderNear(extra.position, extra.x, extra.y), best) }
+    // The same position can come up more than once (a sequence the comments link to, and the same
+    // moves in the joseki tree); each is read once
+    const read = new Set()
+    for (const extra of more) {
+        const key = `${extra.position.stones.join('')}${extra.position.toPlay}:${extra.x},${extra.y}`
+        if (read.has(key)) { continue }
+        read.add(key)
+        best = longer(ladderNear(extra.position, extra.x, extra.y), best)
+    }
     return best
 }
 

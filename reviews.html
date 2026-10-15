@@ -20,6 +20,11 @@
     <link rel="stylesheet" href="index.css">
     <link rel="stylesheet" href="reviews.css">
     <script type="module" src="js/reviews-page.js"></script>
+    <!-- Fetch every module at once, rather than as each import is found (keep in step with js/) -->
+    <link rel="modulepreload" href="js/reviews.js">
+    <link rel="modulepreload" href="js/go.js">
+    <link rel="modulepreload" href="js/shape-view.js">
+    <link rel="modulepreload" href="js/board-view.js">
 </head>
 <body>
 <header class="site-header reviews-header">

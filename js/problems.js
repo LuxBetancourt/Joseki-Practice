@@ -640,7 +640,7 @@ async function continuationPositions(node, after, getNode) {
     let level = [{ node, position: after }]
     let looked = 0
     for (let depth = 0; depth < LADDER_SEARCH_DEPTH && level.length; ++depth) {
-        const next = []
+        const toLoad = []
         for (const { node: from, position } of level) {
             for (const child of from.children) {
                 const point = fromSgf(child.move)
@@ -649,11 +649,12 @@ async function continuationPositions(node, after, getNode) {
                 found.push({ position: played, x: point.x, y: point.y })
                 if (looked < LADDER_SEARCH_NODES && depth < LADDER_SEARCH_DEPTH - 1) {
                     ++looked
-                    next.push({ node: await getNode(child.id), position: played })
+                    toLoad.push({ id: child.id, position: played })
                 }
             }
         }
-        level = next
+        // Each level's nodes are looked up together (the same nodes as one at a time, sooner)
+        level = await Promise.all(toLoad.map(async ({ id, position }) => ({ node: await getNode(id), position })))
     }
     return found
 }

@@ -20,6 +20,22 @@
     <title>Joseki Practice</title>
     <link rel="stylesheet" href="index.css">
     <script type="module" src="js/app.js"></script>
+    <!-- Fetch every module and the empty board at once, rather than as each import is found
+         (keep in step with the imports in js/) -->
+    <link rel="modulepreload" href="js/go.js">
+    <link rel="modulepreload" href="js/josekipedia.js">
+    <link rel="modulepreload" href="js/config.js">
+    <link rel="modulepreload" href="js/problems.js">
+    <link rel="modulepreload" href="js/starting-points.js">
+    <link rel="modulepreload" href="js/lines.js">
+    <link rel="modulepreload" href="js/ladder.js">
+    <link rel="modulepreload" href="js/reviews.js">
+    <link rel="modulepreload" href="js/problem-mix.js">
+    <link rel="modulepreload" href="js/shape-view.js">
+    <link rel="modulepreload" href="js/text.js">
+    <link rel="modulepreload" href="js/sources.js">
+    <link rel="modulepreload" href="js/board-view.js">
+    <link rel="preload" href="resources/root-node.json" as="fetch" crossorigin>
 </head>
 <body>
 <header class="site-header">
