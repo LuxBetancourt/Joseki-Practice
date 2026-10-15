@@ -212,6 +212,7 @@ function gradeAnswer(coord) {
     let message = moveTypeMessage(type)
     if (type === MoveType.GOOD) { message = 'Playable, but there’s a stronger punishment.' }
     toast(`${message} Try again.`, 'error')
+    reviewPunishment(coord, type)
     takeBackWrongAnswer()
 }
 
@@ -262,6 +263,7 @@ async function gradeShapeAnswer(coord) {
             message = `That stone is part of the shape, but it isn’t played ${problem.step ? 'next' : 'first'}.`
         }
         else if (type === MoveType.IDEAL || type === MoveType.GOOD) { message = 'That’s joseki, but it leads to a different shape.' }
+        reviewPunishment(coord, type)
         missLine(message)
         return
     }
@@ -354,10 +356,30 @@ async function gradeSenteAnswer(coord) {
 
     if (!option?.sente) {
         const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
+        reviewPunishment(coord, type)
         missLine(option ? `That’s joseki, but it ends in gote: ${them} gets to play elsewhere.` : moveTypeMessage(type))
         return
     }
     followLine(option.line[0], option.line.slice(1))
+}
+
+/**
+ * A wrong answer that Josekipedia marks as a mistake (a bad or trick move) goes into Review as a
+ * Punish problem for the other side, when Josekipedia records how to punish it. Call it before
+ * the move is taken back. Checking costs one lookup (the position after the mistake), and only
+ * for these moves.
+ */
+async function reviewPunishment(coord, type) {
+    if (type !== MoveType.BAD && type !== MoveType.TRICK) { return }
+    const moves = game.slice(1, answerIndex() + 1).map((entry) => entry.move.coord).concat(coord)
+    let result
+    try { result = await problemAt('punish', moves, { getNode }) }
+    catch { return } // Couldn't check; the miss is still in Review as the problem it was
+    if (!result.problem) { return }
+    const spec = { kind: 'punish', moves, color: result.problem.color, data: problemData('punish', result.problem) }
+    if (!deck.add(spec)) { return } // Already in Review
+    toast(`Added to Review: punishing ${sgfToDisplay(coord)} as ${capitalize(colorName(spec.color))}.`, 'info')
+    render()
 }
 
 /** Shows a wrong answer briefly, then takes it back. */
