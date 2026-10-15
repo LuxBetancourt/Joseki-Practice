@@ -45,18 +45,18 @@ function noteShown(kind, moves) {
 const humanColor = () => (settings.mode === 'review' && problem ? problem.spec.color : settings.player === 'black' ? BLACK : WHITE)
 
 // --- Game state ----------------------------------------------------------------
-// history[i] is the position after i moves. Each entry's `node` is the Josekipedia node for
+// game[i] is the position after i moves. Each entry's `node` is the Josekipedia node for
 // the move that produced it: undefined = not looked up yet, null = not in Josekipedia,
 // otherwise a node (which has `children` once fully loaded).
 
-let history = []
+let game = []
 let current = 0
 let freePlay = false
 let busy = false
 // Bumped whenever the game is navigated; async work started earlier checks it and bails out.
 let generation = 0
 
-// The active problem in Problems and Review modes: the player must answer at history[index].
+// The active problem in Problems and Review modes: the player must answer at game[index].
 //   kind: one of PROBLEM_KINDS (see problem-kinds.js)
 //   answers: Map of coord -> move type for every move Josekipedia knows there
 //   mistake: { move, type } for punish problems
@@ -108,7 +108,7 @@ const answerIndex = () => problem.index + (answeredBy(problem.kind) === 'line' ?
 // follow a fixed sequence (or are answered off the board), which moving around would break
 const navigationLocked = () => replaying() || (problemPending() && answeredBy(problem.kind) !== 'move')
 
-const currentEntry = () => history[current]
+const currentEntry = () => game[current]
 // A Final Shape problem being played out with both sides by the player (see settings.shapeBothSides)
 const playingBothSides = () => Boolean(problem?.bothSides && problemPending())
 const isHumanTurn = (entry = currentEntry()) => freePlay || playingBothSides() || entry.position.toPlay === humanColor()
@@ -140,16 +140,16 @@ function setBusy(value) {
     render()
 }
 
-/** Ensures history[index].node is resolved and, if it's in Josekipedia, fully loaded. */
+/** Ensures game[index].node is resolved and, if it's in Josekipedia, fully loaded. */
 async function resolveNode(index) {
-    const entry = history[index]
+    const entry = game[index]
     if (freePlay) {
         entry.node = null
         return
     }
     if (entry.node === undefined) {
         await resolveNode(index - 1)
-        const parent = history[index - 1].node
+        const parent = game[index - 1].node
         const { coord, color } = entry.move
         entry.node = parent?.children.find((child) => child.move === coord && child.color === color) ?? null
     }
@@ -165,9 +165,9 @@ function pushMove(coord, color) {
 }
 
 function pushEntry(entry) {
-    history = history.slice(0, current + 1)
-    history.push(entry)
-    current = history.length - 1
+    game = game.slice(0, current + 1)
+    game.push(entry)
+    current = game.length - 1
 }
 
 function playMove(coord, { byHuman }) {
@@ -236,7 +236,7 @@ const moveTypeMessage = (type) => (MOVE_TYPE_NAMES[type]
 async function gradeShapeAnswer(coord) {
     const gen = generation
     const at = answerIndex()
-    const start = history[at]
+    const start = game[at]
     if (++problem.attempts === 1) { ++stats.shape.attempted }
 
     const mover = problem.line[problem.step].color // The player's color, or either with both sides
@@ -342,9 +342,9 @@ async function gradeSenteAnswer(coord) {
         try {
             setBusy(true)
             await resolveNode(at)
-            type = history[at].node?.children.find((c) => c.move === coord && c.color === humanColor())?.type ?? null
+            type = game[at].node?.children.find((c) => c.move === coord && c.color === humanColor())?.type ?? null
             if (type === MoveType.IDEAL || type === MoveType.GOOD) {
-                const moves = history.slice(1, at + 1).map((entry) => entry.move.coord)
+                const moves = game.slice(1, at + 1).map((entry) => entry.move.coord)
                 option = await senteOptionAt(moves, coord, { getNode })
             }
         }
@@ -367,7 +367,7 @@ function takeBackWrongAnswer() {
     setBusy(true)
     setTimeout(() => {
         if (gen !== generation) { return }
-        history = history.slice(0, at + 1)
+        game = game.slice(0, at + 1)
         current = at
         ++generation
         setBusy(false)
@@ -459,7 +459,7 @@ async function newProblem() {
     const gen = ++generation
     problem = null
     freePlay = false
-    if (!history.length) { setupPosition([]) }
+    if (!game.length) { setupPosition([]) }
     clearToasts()
 
     const options = { startMoves: splitPath(startPath()), color: humanColor(), firstTen: settings.firstTen, getNode }
@@ -611,7 +611,7 @@ function finishReplay() {
 async function advance({ feedback = false } = {}) {
     const gen = generation
     const index = current
-    const entry = history[index]
+    const entry = game[index]
     setBusy(true)
     try {
         await resolveNode(index)
@@ -693,7 +693,7 @@ function chooseComputerMove(entry) {
 // --- Navigation ----------------------------------------------------------------
 
 function goTo(index) {
-    if (index < 0 || index >= history.length || index === current) { return }
+    if (index < 0 || index >= game.length || index === current) { return }
     current = index
     ++generation
     advance()
@@ -702,14 +702,14 @@ function goTo(index) {
 function undo() {
     if (navigationLocked()) { return }
     let target = current - 1
-    while (target > 0 && !isHumanTurn(history[target])) { --target }
+    while (target > 0 && !isHumanTurn(game[target])) { --target }
     goTo(target)
 }
 
 function redo() {
     if (navigationLocked()) { return }
     let target = current + 1
-    while (target < history.length - 1 && !isHumanTurn(history[target])) { ++target }
+    while (target < game.length - 1 && !isHumanTurn(game[target])) { ++target }
     goTo(target)
 }
 
@@ -722,7 +722,7 @@ function returnToMove(x, y) {
     const coord = toSgf(x, y)
     if (currentEntry().position.at(x, y) === 0) { return }
     for (let i = current; i > 0; --i) {
-        if (history[i].move.coord === coord) {
+        if (game[i].move.coord === coord) {
             goTo(i === current ? i - 1 : i)
             return
         }
@@ -748,7 +748,7 @@ function startGame(start) {
 
 /** Replaces the game with the position after `moves`. Nodes are looked up later by advance(). */
 function setupPosition(moves) {
-    history = [{ position: new Position(), move: null, node: freePlay ? null : { id: ROOT_ID, labels: [] }, path: '' }]
+    game = [{ position: new Position(), move: null, node: freePlay ? null : { id: ROOT_ID, labels: [] }, path: '' }]
     current = 0
     for (const coord of moves) {
         try {
@@ -798,7 +798,7 @@ function renderPathStartMarks() {
         layer.setAttribute('class', 'marks')
         svg.append(layer)
     }
-    const position = history[problem.index].position
+    const position = game[problem.index].position
     layer.innerHTML = currentMarks().map(({ x, y, shape }) => {
         const on = { [EMPTY]: 'on-empty', [BLACK]: 'on-black' }[position.at(x, y)] || 'on-white'
         return markShape(shape, x, y, `mark ${on}`)
@@ -888,7 +888,7 @@ function render() {
     $('#board-wrap').classList.toggle('answer-on-board', answeredOnBoard())
     renderAnswerHint()
     $('#undo').disabled = current === 0 || navigationLocked()
-    $('#redo').disabled = current === history.length - 1 || navigationLocked()
+    $('#redo').disabled = current === game.length - 1 || navigationLocked()
     $('#pass').disabled = !canPlayOnBoard()
 
     const toPlay = capitalize(colorName(position.toPlay))
@@ -1068,7 +1068,7 @@ function renderAnswerChoices() {
 
 /** What Josekipedia records that gives the answer, as text (and the tenuki comment, if any). */
 function answerExplanation() {
-    const node = history[problem.index].node
+    const node = game[problem.index].node
     if (problem.kind === 'better') {
         const verdicts = problem.labels.map(labelText).filter(Boolean)
         return [`Josekipedia: ${verdicts.join(' ')}`]
@@ -1151,14 +1151,14 @@ function renderPathChoices() {
 
 /** One region for all of a path problem's cards, so they're easy to compare. */
 function pathRegion() {
-    const start = history[problem.index].position
+    const start = game[problem.index].position
     const points = problem.options.flatMap(({ line, position }) => localShape(position, line.map(({ move }) => fromSgf(move))))
     return shapeRegion(start, points)
 }
 
 /** The position the sequences start from, with the last move circled. */
 function pathStartCard(region) {
-    const entry = history[problem.index]
+    const entry = game[problem.index]
     const lastMove = entry.move && fromSgf(entry.move.coord)
     const card = document.createElement('figure')
     card.className = 'path-start'
@@ -1881,7 +1881,7 @@ function updateUrl(entry) {
     const hash = explore
         ? (entry.path ? `#path=${entry.path}` : '')
         : (problem ? `#problem=${problemLink()}` : '')
-    if (location.hash !== hash) { // window.history: `history` here is the game's move list
+    if (location.hash !== hash) {
         window.history.replaceState(null, '', hash || location.pathname + location.search)
     }
 }
@@ -1934,7 +1934,7 @@ async function loadSharedProblem(spec, link, previousPlayer, reviewKey) {
     const gen = ++generation
     problem = null
     freePlay = false
-    if (!history.length) { setupPosition([]) }
+    if (!game.length) { setupPosition([]) }
     clearToasts()
     try {
         setBusy(true)
