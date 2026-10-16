@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares, problemAt, ladderMoves as findLadderMoves, ladderStonePoint, ladderSetup, generateSente } from '../js/problems.js'
+import { generateNextMove, generatePunish, generateFinalShape, generatePickPath, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, generateWhosBetter, generateTenuki, outcomeOf, tenukiVerdict, clearSpares, problemAt, ladderMoves as findLadderMoves, ladderStonePoint, ladderSetup, generateSente, localArea } from '../js/problems.js'
 import { BLACK, WHITE } from '../js/go.js'
 
 // A tiny fake Josekipedia tree. Types: 0 ideal, 1 good, 2 bad, 3 trick.
@@ -432,6 +432,19 @@ test('ladders: the stone goes in the opposite corner, clear of other stones', as
     const crowded = empty.playSgf('dp', BLACK) // The bottom-left 4-4 is taken
     const point = ladderStonePoint(crowded, 'qd')
     assert.ok(!point || Math.abs(point.x - 3) + Math.abs(point.y - 15) > 0, 'not on or next to the stone there')
+})
+
+test('the local area: the stones around the last move, plus a margin, out to the edge they come near', async () => {
+    const { Position } = await import('../js/go.js')
+    const play = (moves, position = new Position()) => moves.reduce((p, move) => p.playSgf(move), position)
+    // A top-right joseki: Q16 R17 P17 R16 P16 R15 (x 15-17, y 2-4) reaches the top and right edges
+    const corner = play(['pd', 'qc', 'oc', 'qd', 'od', 'qe'])
+    assert.deepEqual(localArea(corner, 'qe'), { x0: 12, y0: 0, x1: 18, y1: 6 })
+    // Stones in the other corners (a fuseki) are too far away to count
+    const fuseki = play(['dd', 'dp', 'pp'], corner)
+    assert.deepEqual(localArea(fuseki, 'qe'), { x0: 12, y0: 0, x1: 18, y1: 6 })
+    // A stone further along the side, within reach of the corner's stones, widens it
+    assert.deepEqual(localArea(play(['qh'], corner), 'qe'), { x0: 12, y0: 0, x1: 18, y1: 9 })
 })
 
 // After pd qf nc qc, Black has two joseki moves: qd (White pc, Black od, and the line ends with

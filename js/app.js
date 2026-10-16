@@ -1,7 +1,7 @@
 import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
 import { getNode, prefetch, downloadCount, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import {
-    GENERATORS, senteOptionAt, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup,
+    GENERATORS, senteOptionAt, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup, localArea,
 } from './problems.js'
 import { PROBLEM_KINDS, KINDS, byKind } from './problem-kinds.js'
 import { loadSettings, saveSettings as storeSettings } from './settings.js'
@@ -126,7 +126,7 @@ const view = new BoardView($('#board'), {
     onPlay: (x, y) => {
         if (replaying()) { return finishReplay() } // A click skips to the problem
         if (ladderStoneAt(x, y)) { return } // Not part of the game, just there to decide the ladder
-        if (answeredOnBoard()) {
+        if (answeredOnBoard() && problem.kind === 'better') {
             // Who's Better?: a side's stone picks that side, an empty point picks even
             const color = currentEntry().position.at(x, y)
             gradeAnswerChoice(color === BLACK ? 'black' : color === WHITE ? 'white' : 'even')
@@ -134,6 +134,8 @@ const view = new BoardView($('#board'), {
         else if (canPlayOnBoard()) { playMove(toSgf(x, y), { byHuman: true }) }
         else if (answeredWithButtons()) { nudgeAnswerButtons() }
     },
+    // Tenuki-able?: a click in the local area means play locally, anywhere else means tenuki
+    onArea: (inside) => gradeAnswerChoice(inside ? 'no' : 'yes'),
     onContextMenu: returnToMove,
     canHover: () => (canPlayOnBoard() ? currentEntry().position.toPlay : null),
 })
@@ -899,7 +901,8 @@ function render() {
         highlights: highlights.filter((h) => h.x !== undefined),
         marks: currentMarks(),
         target,
-        fadeStones: answeredOnBoard(),
+        fadeStones: answeredOnBoard() && problem.kind === 'better',
+        area: answeredOnBoard() && problem.kind === 'tenuki' ? tenukiArea() : null,
         ...ladderDrawing(position),
     })
     renderLadderNote()
@@ -910,7 +913,7 @@ function render() {
         $('#board-wrap').hidden = pathProblem
         $('#board-hint').hidden = pathProblem
     }
-    // Look, don't play (see .view-only); Who's Better? is answered by clicking the stones instead
+    // Look, don't play (see .view-only); Who's Better? and Tenuki-able? can be answered on the board instead
     $('#board-wrap').classList.toggle('view-only', answeredWithButtons() && !answeredOnBoard())
     $('#board-wrap').classList.toggle('answer-on-board', answeredOnBoard())
     renderAnswerHint()
@@ -1026,8 +1029,18 @@ let answerChoicesFor = null // The problem the buttons were built for
 
 /** True while a problem is waiting for an answer from the buttons rather than a move on the board. */
 const answeredWithButtons = () => Boolean(problemPending() && ANSWER_CHOICES[problem.kind] && current >= problem.index)
-/** Who's Better? can also be answered by clicking a side's stones (or an empty point for even). */
-const answeredOnBoard = () => answeredWithButtons() && problem.kind === 'better'
+/**
+ * Who's Better? can also be answered by clicking a side's stones (or an empty point for even), and
+ * Tenuki-able? by clicking inside the local area or outside it.
+ */
+const answeredOnBoard = () => answeredWithButtons() && ['better', 'tenuki'].includes(problem.kind)
+
+/** Tenuki-able?'s local area: around the joseki's last move, with the answers as its tooltips. */
+function tenukiArea() {
+    problem.area ??= localArea(game[problem.index].position, problem.moves.at(-1))
+    const labels = Object.fromEntries(ANSWER_CHOICES.tenuki)
+    return { ...problem.area, inside: labels.no, outside: labels.yes }
+}
 
 /** A small stone of `color`, to put next to text about that side. */
 function stoneIcon(color) {

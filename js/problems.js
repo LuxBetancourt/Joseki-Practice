@@ -720,6 +720,35 @@ export function ladderStonePoint(position, move) {
     return null
 }
 
+const AREA_REACH = 3 // Stones this many lines apart (or closer) count as part of the same fight
+const AREA_MARGIN = 2 // Lines of board added around those stones
+/**
+ * The area of the board where the fight around `move` is: the stones within AREA_REACH lines of
+ * it, of those stones, and so on, plus a margin, reaching the edge where it comes near. Stones
+ * elsewhere (another corner's joseki, a fuseki) are left out. Returns { x0, y0, x1, y1 }, inclusive.
+ */
+export function localArea(position, move) {
+    const start = fromSgf(move)
+    const group = [start]
+    const seen = new Set([`${start.x},${start.y}`])
+    for (let i = 0; i < group.length; ++i) {
+        const { x, y } = group[i]
+        for (let yy = Math.max(0, y - AREA_REACH); yy <= Math.min(SIZE - 1, y + AREA_REACH); ++yy) {
+            for (let xx = Math.max(0, x - AREA_REACH); xx <= Math.min(SIZE - 1, x + AREA_REACH); ++xx) {
+                if (position.at(xx, yy) === EMPTY || seen.has(`${xx},${yy}`)) { continue }
+                seen.add(`${xx},${yy}`)
+                group.push({ x: xx, y: yy })
+            }
+        }
+    }
+    // Within the margin of an edge, the area goes to the edge: a corner fight runs out to it
+    const low = (v) => (v - AREA_MARGIN <= AREA_MARGIN ? 0 : v - AREA_MARGIN)
+    const high = (v) => (v + AREA_MARGIN >= SIZE - 1 - AREA_MARGIN ? SIZE - 1 : v + AREA_MARGIN)
+    const xs = group.map((p) => p.x)
+    const ys = group.map((p) => p.y)
+    return { x0: low(Math.min(...xs)), y0: low(Math.min(...ys)), x1: high(Math.max(...xs)), y1: high(Math.max(...ys)) }
+}
+
 // --- A problem from a chosen position ---------------------------------------------
 // For saving an Explore position to Review: the given type of problem at exactly this position,
 // held to the same standards as the generators.

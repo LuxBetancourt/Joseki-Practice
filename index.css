@@ -690,7 +690,21 @@ body[data-mode="review"] #options > h2.not-explore { margin-top: 0; } /* First h
 }
 .stone-icon.black { background: radial-gradient(circle at 35% 35%, #555, #111 70%); }
 .stone-icon.white { background: radial-gradient(circle at 35% 35%, #fff, #ccc 80%); }
-#board-wrap.view-only #answer-hint.question { font-size: 1.05rem; padding: .3em 1.1em; }
+#board-wrap:is(.view-only, .answer-on-board) #answer-hint.question { font-size: 1.05rem; padding: .3em 1.1em; }
+
+/* Tenuki-able?: the local area in a dashed box, the rest of the board darker. Clicking inside
+   means play locally, outside means tenuki; the part under the mouse brightens */
+.goban .area-outside { fill: rgba(0, 0, 0, .2); cursor: pointer; transition: fill .12s; }
+.goban .area-outside:hover { fill: rgba(0, 0, 0, .08); }
+.goban .area-inside {
+    fill: rgba(255, 255, 255, 0);
+    stroke: var(--kind, #333);
+    stroke-width: .08;
+    stroke-dasharray: .3 .18;
+    cursor: pointer;
+    transition: fill .12s;
+}
+.goban .area-inside:hover { fill: rgba(255, 255, 255, .16); }
 
 /* Explore: Add to Review, a menu of the problem types this position can be saved as */
 #add-review-wrap { position: relative; }

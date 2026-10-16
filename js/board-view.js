@@ -52,7 +52,7 @@ export class BoardView {
     constructor(svg, handlers) {
         this.svg = svg
         this.handlers = handlers
-        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null, fadeStones: false, extraStones: [], badges: [] }
+        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null, fadeStones: false, extraStones: [], badges: [], area: null }
         this.hoverPoint = null
 
         const size = SIZE - 1 + 2 * MARGIN
@@ -62,12 +62,14 @@ export class BoardView {
         this.drawStatic()
         this.highlightLayer = el('g', { class: 'highlights' }, svg)
         this.stoneLayer = el('g', { class: 'stones' }, svg)
+        this.areaLayer = el('g', { class: 'area' }, svg)
         this.markLayer = el('g', { class: 'marks' }, svg)
         this.ghost = el('circle', { class: 'stone ghost', r: 0.47, visibility: 'hidden' }, svg)
 
         svg.addEventListener('pointermove', (e) => this.onPointerMove(e))
         svg.addEventListener('pointerleave', () => this.setHover(null))
         svg.addEventListener('click', (e) => {
+            if (this.state.area) { return this.clickArea(e) }
             const point = this.pointFromEvent(e)
             if (point) { this.handlers.onPlay(point.x, point.y) }
         })
@@ -111,6 +113,17 @@ export class BoardView {
         if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) { return null }
         if (Math.hypot(p.x - x, p.y - y) > 0.55) { return null }
         return { x, y }
+    }
+
+    /** With an area shown, a click anywhere on the grid is inside it or outside it. */
+    clickArea(event) {
+        const matrix = this.svg.getScreenCTM()
+        if (!matrix) { return }
+        const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
+        const onGrid = (v) => v >= -0.5 && v <= SIZE - 0.5
+        if (!onGrid(p.x) || !onGrid(p.y)) { return }
+        const { x0, y0, x1, y1 } = this.state.area
+        this.handlers.onArea(p.x >= x0 - 0.5 && p.x <= x1 + 0.5 && p.y >= y0 - 0.5 && p.y <= y1 + 0.5)
     }
 
     onPointerMove(event) {
@@ -158,6 +171,9 @@ export class BoardView {
      *   fadeStones: boolean; stones are translucent, and hovering one lights up its whole side
      *   extraStones: [{x, y, color, title?}] stones drawn on the board that aren't part of the game
      *   badges:     [{x, y, text, title?}] small labels on stones' upper right
+     *   area:       {x0, y0, x1, y1, inside?, outside?} | null; a dashed box with the board outside
+     *               it darkened, clicked inside or outside (handlers.onArea); inside and outside
+     *               are their tooltips
      */
     render(state) {
         Object.assign(this.state, state)
@@ -218,6 +234,24 @@ export class BoardView {
             `<g class="badge">${title ? `<title>${escape(title)}</title>` : ''}<circle cx="${x + 0.33}" cy="${y - 0.33}" r="0.21"/><text x="${x + 0.33}" y="${y - 0.33}">${escape(text)}</text></g>`,
         )).join('')
 
+        this.renderArea()
         this.updateGhost()
+    }
+
+    renderArea() {
+        const { area } = this.state
+        if (!area) {
+            this.areaLayer.replaceChildren()
+            return
+        }
+        const escape = (text) => String(text ?? '').replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
+        const box = (x0, y0, x1, y1) => `M${x0} ${y0}H${x1}V${y1}H${x0}Z`
+        const edge = SIZE - 0.5
+        const inner = box(area.x0 - 0.5, area.y0 - 0.5, area.x1 + 0.5, area.y1 + 0.5)
+        this.areaLayer.innerHTML = [
+            // The board outside the box, as the whole grid with the box cut out of it
+            `<path class="area-outside" fill-rule="evenodd" d="${box(-0.5, -0.5, edge, edge)}${inner}"><title>${escape(area.outside)}</title></path>`,
+            `<path class="area-inside" d="${inner}"><title>${escape(area.inside)}</title></path>`,
+        ].join('')
     }
 }
