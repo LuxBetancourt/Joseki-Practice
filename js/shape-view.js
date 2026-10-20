@@ -1,7 +1,7 @@
 // Small, non-interactive board showing just the region around a shape (e.g. a joseki's final position).
 // Uses the same CSS classes and stone gradients as the main board.
 
-import { SIZE, EMPTY, BLACK } from './go.js'
+import { SIZE, EMPTY, BLACK, orient, unorient } from './go.js'
 
 const NS = 'http://www.w3.org/2000/svg'
 const EDGE_SNAP = 5 // Show the edge if the shape comes within this many lines of it
@@ -93,9 +93,25 @@ export function shapeRegion(position, points = allStones(position)) {
  * Renders `position` cropped to `region` (default: shapeRegion(position)).
  * `numbers` maps "x,y" to a label drawn on that stone (e.g. move order).
  * `rings` are [{x, y, type}] points to circle; `type` is a CSS class for the ring's color.
+ * `orientation` turns and mirrors it as the main board is (see orient in go.js); everything else
+ * is given in the game's coordinates.
  */
-export function renderShape(position, { region = shapeRegion(position), numbers = new Map(), rings = [], label = '' } = {}) {
+export function renderShape(position, { region = shapeRegion(position), numbers = new Map(), rings = [], label = '', orientation = 0 } = {}) {
     trackPixelRatio()
+    if (orientation) {
+        // Draw the turned board: look up each drawn point's stone back in the game's coordinates
+        const game = position
+        position = { at: (x, y) => { const p = unorient({ x, y }, orientation); return game.at(p.x, p.y) } }
+        const a = orient({ x: region.x0, y: region.y0 }, orientation)
+        const b = orient({ x: region.x1, y: region.y1 }, orientation)
+        region = { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) }
+        numbers = new Map([...numbers].map(([key, number]) => {
+            const [x, y] = key.split(',').map(Number)
+            const p = orient({ x, y }, orientation)
+            return [`${p.x},${p.y}`, number]
+        }))
+        rings = rings.map((ring) => ({ ...ring, ...orient(ring, orientation) }))
+    }
     const { x0, y0, x1, y1 } = region
     const left = x0 - OVERHANG
     const top = y0 - OVERHANG

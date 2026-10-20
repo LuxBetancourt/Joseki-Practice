@@ -10,13 +10,13 @@ import { byKind } from './problem-kinds.js'
 import { readJson, writeJson, isObject } from './storage.js'
 
 const KEY = 'settings'
-export const SETTINGS_VERSION = 2
+export const SETTINGS_VERSION = 3
 
 export const DEFAULT_SETTINGS = {
     version: SETTINGS_VERSION,
     mode: 'problems', // 'explore' | 'problems' | 'review'
     problemTypes: byKind(() => true),
-    player: 'black',
+    player: 'random', // 'black' | 'white' | 'random': a color picked for each problem
     ideal: true, good: false, bad: false, trick: false, question: false,
     firstTen: true,
     onlyPassIfJoseki: false,
@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS = {
     autoAdvance: false, // Go to the next problem automatically after solving one
     shapeBothSides: true, // In Final Shape, the player plays the other side's moves too
     replaySetup: false, // Play each problem's moves out from an empty board before it starts
+    randomCorners: false, // Turn each problem to a random corner (and maybe mirror it)
     expanded: [], // Starting-point branches the player has expanded
     start: 'empty',
 }
@@ -33,6 +34,8 @@ export const DEFAULT_SETTINGS = {
 // What changes on reaching each version, for settings saved before it
 const UPGRADES = {
     2: (saved) => { saved.shapeBothSides = true }, // Final Shape's Play both sides became on by default
+    // Random became the default Player, in place of Black; anyone who'd chosen White keeps it
+    3: (saved) => { if (saved.player !== 'white') { saved.player = 'random' } },
 }
 
 // Settings saved one per key by the first version of the site (before 'settings' existed)

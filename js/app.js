@@ -1,4 +1,4 @@
-import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName } from './go.js'
+import { Position, IllegalMoveError, EMPTY, BLACK, WHITE, PASS, toSgf, fromSgf, sgfToDisplay, colorName, orient, orientSgf } from './go.js'
 import { getNode, prefetch, downloadCount, ROOT_ID, MoveType, MOVE_TYPE_NAMES, TENUKI_LABEL, labelText } from './josekipedia.js'
 import {
     GENERATORS, senteOptionAt, problemData, rebuildProblem, StaleProblemError, encodeProblem, decodeProblem, problemAt, ladderSetup, localArea,
@@ -42,7 +42,17 @@ function noteShown(kind, moves) {
 }
 
 // In Review mode the player takes the color they missed the problem with
-const playerColor = () => (settings.player === 'black' ? BLACK : WHITE) // The color chosen under Player
+// With Player set to Random, the color picked for the current problem (or Explore game)
+let randomColor = BLACK
+const pickRandomColor = () => { randomColor = Math.random() < 0.5 ? BLACK : WHITE }
+// The color chosen under Player (or picked for this problem, with Random)
+const playerColor = () => (settings.player === 'random' ? randomColor : settings.player === 'black' ? BLACK : WHITE)
+// Each problem can be turned to another corner and mirrored (settings.randomCorners). The game
+// stays in Josekipedia's coordinates; only the board, the small boards and coordinates in text
+// are turned, by this (see orient in go.js). Explore isn't turned
+let orientation = 0
+/** A point as the player sees it on the turned board, e.g. "Q16". */
+const where = (coord) => sgfToDisplay(orientSgf(coord, orientation))
 // The color the player is playing: a review's own color (which in Problems mode can differ from
 // the chosen one, see ReviewDeck.due), otherwise the chosen one
 const humanColor = () => (problem && (settings.mode === 'review' || problem.reviewKey) ? problem.spec.color : playerColor())
@@ -97,7 +107,7 @@ const SEARCH_DOWNLOAD_BUDGET = 120
 const startPath = () => (settings.start === 'empty' || settings.start === 'demo' ? '' : settings.start)
 const dueReviews = () => (settings.mode === 'review'
     ? deck.due()
-    : deck.due({ kinds: enabledProblemTypes(), color: playerColor(), startMoves: splitPath(startPath()) }))
+    : deck.due({ kinds: enabledProblemTypes(), color: settings.player === 'random' ? undefined : playerColor(), startMoves: splitPath(startPath()) }))
 
 /** Updates the review deck with how the player did on their first attempt at the problem. */
 function recordFirstAttempt(correct) {
@@ -246,6 +256,8 @@ async function gradeShapeAnswer(coord) {
     if (++problem.attempts === 1) { ++stats.shape.attempted }
 
     const mover = problem.line[problem.step].color // The player's color, or either with both sides
+    const point = fromSgf(coord)
+    const inShape = Boolean(point) && problem.target.at(point.x, point.y) === mover
     let rest = coord === problem.line[problem.step].move ? problem.line.slice(problem.step + 1) : null
     let type = null
     try {
@@ -253,8 +265,14 @@ async function gradeShapeAnswer(coord) {
         await resolveNode(at)
         const child = start.node?.children.find((c) => c.move === coord && c.color === mover)
         type = child ? child.type : null
-        if (!rest && (type === MoveType.IDEAL || type === MoveType.GOOD)) {
-            const line = await lineAfter(child, start.position)
+        // Another joseki move can reach the same shape in a different order. Only a move that's
+        // one of the shape's stones can, and the line needs no more moves than the shape has left,
+        // so it isn't followed further: each move followed is a lookup
+        if (!rest && inShape && (type === MoveType.IDEAL || type === MoveType.GOOD)) {
+            const line = await mainLine({
+                node: await getNode(child.id), position: start.position.playSgf(coord, mover), getNode,
+                maxLength: problem.line.length - problem.step - 1,
+            })
             if (line.position.sameStones(problem.target)) { rest = line.moves }
         }
     }
@@ -262,9 +280,8 @@ async function gradeShapeAnswer(coord) {
     if (gen !== generation) { return }
 
     if (!rest) {
-        const point = fromSgf(coord)
         let message = moveTypeMessage(type)
-        if (point && problem.target.at(point.x, point.y) === mover) {
+        if (inShape) {
             message = `That stone is part of the shape, but it isn’t played ${problem.step ? 'next' : 'first'}.`
         }
         else if (type === MoveType.IDEAL || type === MoveType.GOOD) { message = 'That’s joseki, but it leads to a different shape.' }
@@ -384,7 +401,7 @@ async function reviewPunishment(coord, type) {
     if (!result.problem) { return }
     const spec = { kind: 'punish', moves, color: result.problem.color, data: problemData('punish', result.problem) }
     if (!deck.add(spec, { anyColor: true })) { return } // Already in Review
-    toast(`Added to Review: punishing ${sgfToDisplay(coord)} as ${capitalize(colorName(spec.color))}.`, 'info')
+    toast(`Added to Review: punishing ${where(coord)} as ${capitalize(colorName(spec.color))}.`, 'info')
     render()
 }
 
@@ -462,10 +479,10 @@ const problemPrompt = () => {
     }
     const { move, type } = problem.mistake
     const them = capitalize(colorName(humanColor() === BLACK ? WHITE : BLACK))
-    const where = sgfToDisplay(move)
+    const point = where(move)
     return type === MoveType.TRICK
-        ? `${them}’s ${where} is a trick move. Find the refutation.`
-        : `${them}’s ${where} is a mistake. Punish it!`
+        ? `${them}’s ${point} is a trick move. Find the refutation.`
+        : `${them}’s ${point} is a mistake. Punish it!`
 }
 
 /** Loads a problem: in Review mode the most overdue review, in Problems mode sometimes a review. */
@@ -490,6 +507,7 @@ async function newProblem() {
     if (!game.length) { setupPosition([]) }
     clearToasts()
 
+    if (settings.player === 'random') { pickRandomColor() }
     const options = { startMoves: splitPath(startPath()), color: humanColor(), firstTen: settings.firstTen, getNode }
     try {
         setBusy(true) // Inside the try, so that even a failure here can't leave it searching forever
@@ -548,7 +566,7 @@ async function newProblem() {
         const ladder = await findLadderSetup(found, kind)
         if (gen !== generation) { return }
         presentProblem(found, kind, { reviewKey, color: reviewColor || found.color || humanColor(), ladder })
-        if (reviewColor && reviewColor !== playerColor()) { toast(`You’re playing ${capitalize(colorName(reviewColor))} for this review.`) }
+        if (reviewColor && settings.player !== 'random' && reviewColor !== playerColor()) { toast(`You’re playing ${capitalize(colorName(reviewColor))} for this review.`) }
     }
     catch (error) {
         if (gen !== generation) { return }
@@ -575,6 +593,7 @@ async function findLadderSetup(found, kind) {
 
 /** Puts a generated or rebuilt problem on the board. */
 function presentProblem(found, kind, { reviewKey = null, color = humanColor(), link, ladder = null } = {}) {
+    orientation = settings.randomCorners ? Math.floor(Math.random() * 8) : 0
     setupPosition(found.moves)
     problem = {
         ...found, kind, index: current, attempts: 0, solved: false, revealed: false, wrong: [], step: 0, missed: false, hint: false,
@@ -762,8 +781,14 @@ function pass() {
     if (canPlayOnBoard()) { playMove(PASS, { byHuman: true }) }
 }
 
-function startGame(start) {
+/** Starts an Explore game from `start`; with Player set to Random, the player plays `color` (or a random one). */
+function startGame(start, { color } = {}) {
     problem = null
+    orientation = 0
+    if (settings.player === 'random') {
+        if (color) { randomColor = color }
+        else { pickRandomColor() }
+    }
     freePlay = start === 'demo'
     const preset = [...JOSEKI, ...FUSEKI].flatMap(function flatten(p) { return [p, ...(p.children || []).flatMap(flatten)] })
         .find((p) => p.path === start)
@@ -784,7 +809,7 @@ function setupPosition(moves) {
             pushMove(coord, currentEntry().position.toPlay)
         }
         catch {
-            toast(`Couldn’t set up that position (illegal move at ${sgfToDisplay(coord)}).`, 'error')
+            toast(`Couldn’t set up that position (illegal move at ${where(coord)}).`, 'error')
             break
         }
     }
@@ -830,7 +855,8 @@ function renderPathStartMarks() {
     const position = game[problem.index].position
     layer.innerHTML = currentMarks().map(({ x, y, shape }) => {
         const on = { [EMPTY]: 'on-empty', [BLACK]: 'on-black' }[position.at(x, y)] || 'on-white'
-        return markShape(shape, x, y, `mark ${on}`)
+        const v = orient({ x, y }, orientation)
+        return markShape(shape, v.x, v.y, `mark ${on}`)
     }).join('')
 }
 
@@ -904,6 +930,7 @@ function render() {
         fadeStones: answeredOnBoard() && problem.kind === 'better',
         area: answeredOnBoard() && problem.kind === 'tenuki' ? tenukiArea() : null,
         ...ladderDrawing(position),
+        orientation,
     })
     renderLadderNote()
 
@@ -1013,12 +1040,12 @@ function renderLadderNote() {
     note.hidden = !ladder || problemPending()
     if (note.hidden) { return }
     const moves = [...new Map(ladder.moves.map((m) => [m.move, m])).values()]
-        .map(({ move, color }) => `${capitalize(colorName(color))}’s ${sgfToDisplay(move)}`)
+        .map(({ move, color }) => `${capitalize(colorName(color))}’s ${where(move)}`)
     const list = moves.length > 1 ? `${moves.slice(0, -1).join(', ')} and ${moves.at(-1)}` : moves[0]
     let text = `${list} ${moves.length > 1 ? 'need' : 'needs'} a favorable ladder.`
     if (ladder.stone) {
         const side = colorName(ladder.color)
-        text += ` The ${side} stone at ${sgfToDisplay(toSgf(ladder.stone.x, ladder.stone.y))} stands in for one.`
+        text += ` The ${side} stone at ${where(toSgf(ladder.stone.x, ladder.stone.y))} stands in for one.`
     }
     note.textContent = text
 }
@@ -1121,7 +1148,7 @@ function answerExplanation() {
     if (pass && MOVE_TYPE_NAMES[pass.type]) { reasons.push(`Tenuki is recorded as ${pass.type === MoveType.IDEAL ? 'an' : 'a'} ${MOVE_TYPE_NAMES[pass.type]} move here.`) }
     if (node?.children?.some((child) => child.color === color && child.labels.includes(15))) { reasons.push(`${side}’s next move here is marked “Necessary”.`) }
     if (problem.inferredFrom) {
-        reasons.push(`Josekipedia doesn’t mark tenuki as playable here, and the joseki continues locally with ${side}’s ${sgfToDisplay(problem.inferredFrom)} (marked on the board).`)
+        reasons.push(`Josekipedia doesn’t mark tenuki as playable here, and the joseki continues locally with ${side}’s ${where(problem.inferredFrom)} (marked on the board).`)
     }
     const parts = [reasons.join(' ')]
     const comment = pass && cleanText(pass.comment)
@@ -1202,7 +1229,7 @@ function pathStartCard(region) {
     const lastMove = entry.move && fromSgf(entry.move.coord)
     const card = document.createElement('figure')
     card.className = 'path-start'
-    card.append(renderShape(entry.position, { region, rings: lastMove ? [{ ...lastMove, type: 'last' }] : [], label: 'Starting position' }))
+    card.append(renderShape(entry.position, { region, rings: lastMove ? [{ ...lastMove, type: 'last' }] : [], label: 'Starting position', orientation }))
     const caption = document.createElement('figcaption')
     caption.textContent = `Starting position · ${capitalize(colorName(entry.position.toPlay))} to play`
     // The board, with its ladder stone, is hidden here, so say it
@@ -1225,7 +1252,7 @@ function pathCard(option, i, region) {
     }))
     const rings = []
     if (option.mistake) { rings.push({ ...fromSgf(option.mistake.move), type: 'bad' }) }
-    button.append(renderShape(option.position, { region, numbers, rings, label: `Sequence ${'ABC'[i]}` }))
+    button.append(renderShape(option.position, { region, numbers, rings, label: `Sequence ${'ABC'[i]}`, orientation }))
 
     const caption = document.createElement('figcaption')
     const letter = document.createElement('strong')
@@ -1243,7 +1270,7 @@ function pathExplanation(option) {
     const what = MOVE_TYPE_NAMES[type]
         ? `is a ${MOVE_TYPE_NAMES[type] === 'question' ? 'questionable' : MOVE_TYPE_NAMES[type]} move`
         : 'isn’t joseki'
-    return `Move ${step + 1}: ${capitalize(colorName(color))}’s ${sgfToDisplay(move)} ${what}.`
+    return `Move ${step + 1}: ${capitalize(colorName(color))}’s ${where(move)} ${what}.`
 }
 
 function gradePath(i) {
@@ -1322,7 +1349,7 @@ function followUpCard(child, position, key) {
     slot.append(spinner())
     const caption = document.createElement('figcaption')
     const name = document.createElement('strong')
-    name.textContent = sgfToDisplay(child.move)
+    name.textContent = where(child.move)
     const badge = document.createElement('span')
     badge.className = `badge ${MOVE_TYPE_NAMES[child.type]}`
     badge.textContent = MOVE_TYPE_NAMES[child.type]
@@ -1342,7 +1369,7 @@ function followUpCard(child, position, key) {
         const numbers = new Map(played.map(({ x, y, n }) => [`${x},${y}`, n]))
         const region = shapeRegion(line.position, localShape(line.position, played))
         const rings = [{ ...point, type: MOVE_TYPE_NAMES[child.type] }]
-        slot.replaceWith(renderShape(line.position, { region, numbers, rings, label: `Follow-up variation after ${sgfToDisplay(child.move)}` }))
+        slot.replaceWith(renderShape(line.position, { region, numbers, rings, label: `Follow-up variation after ${where(child.move)}`, orientation }))
 
         const texts = line.node.labels.map(labelText).filter(Boolean)
         labels.replaceChildren(...texts.map((text) => {
@@ -1517,7 +1544,7 @@ function renderMoveInfo(entry) {
     $('#josekipedia-link').hidden = spoiler
     $('#josekipedia-link').href = `${JOSEKIPEDIA_URL}#path:${entry.path}`
     $('#move-title').textContent = entry.move
-        ? `Move ${current}: ${capitalize(colorName(entry.move.color))} ${sgfToDisplay(entry.move.coord)}`
+        ? `Move ${current}: ${capitalize(colorName(entry.move.color))} ${where(entry.move.coord)}`
         : 'Start'
 
     const meta = $('#move-meta')
@@ -1604,7 +1631,7 @@ function renderSegment(segment) {
             const button = document.createElement('button')
             button.type = 'button'
             button.className = 'link'
-            button.textContent = segment.label
+            button.textContent = splitPath(segment.path).map(where).join(' ')
             button.title = 'Load this variation'
             button.addEventListener('click', () => {
                 document.querySelectorAll('input[name="start"]').forEach((input) => { input.checked = false })
@@ -1621,7 +1648,7 @@ function renderSegment(segment) {
             symbol.className = 'shape-symbol'
             symbol.setAttribute('aria-hidden', 'true')
             symbol.textContent = SHAPE_SYMBOLS[marks.shapes.get(segment.coord)]
-            button.append(symbol, segment.label)
+            button.append(symbol, where(segment.coord))
             button.title = 'Mark on the board'
             const pinned = marks.pinned.has(segment.coord)
             button.classList.toggle('pinned', pinned)
@@ -1961,7 +1988,8 @@ function openSharedProblem() {
     const previousPlayer = settings.player
     const review = settings.mode === 'review' && deck.find(reviewKey(spec)) ? reviewKey(spec) : null
     settings.mode = review ? 'review' : 'problems'
-    settings.player = colorName(spec.color)
+    if (settings.player === 'random') { randomColor = spec.color } // Random stays: this problem is just for that color
+    else { settings.player = colorName(spec.color) }
     saveSettings()
     document.querySelectorAll('input[name="mode"]').forEach((input) => { input.checked = input.value === settings.mode })
     document.querySelectorAll('input[name="player"]').forEach((input) => { input.checked = input.value === settings.player })
@@ -2012,13 +2040,13 @@ function openSharedPosition() {
 
     const previousPlayer = settings.player
     settings.mode = 'explore'
-    settings.player = colorName(position.toPlay)
+    if (settings.player !== 'random') { settings.player = colorName(position.toPlay) }
     saveSettings()
     document.querySelectorAll('input[name="mode"]').forEach((input) => { input.checked = input.value === 'explore' })
     document.querySelectorAll('input[name="player"]').forEach((input) => { input.checked = input.value === settings.player })
     document.querySelectorAll('input[name="start"]').forEach((input) => { input.checked = false })
     applyMode()
-    startGame(match[1])
+    startGame(match[1], { color: position.toPlay })
     // Reloading the page lands here too, so only speak up if the player's color changed
     if (settings.player !== previousPlayer) { toast(`You’re playing ${capitalize(settings.player)}, whose turn it is in this position.`) }
     return true

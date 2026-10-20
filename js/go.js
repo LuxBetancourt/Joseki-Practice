@@ -32,6 +32,33 @@ export function sgfToDisplay(coord) {
     return COLUMN_LETTERS[point.x] + (SIZE - point.y)
 }
 
+/**
+ * The board's 8 symmetries, numbered 0-7 (0 leaves the board as it is): bit 4 swaps x and y, then
+ * bit 1 mirrors left-right and bit 2 top-bottom. Works on fractional points too.
+ */
+export function orient({ x, y }, n) {
+    if (n & 4) { [x, y] = [y, x] }
+    if (n & 1) { x = SIZE - 1 - x }
+    if (n & 2) { y = SIZE - 1 - y }
+    return { x, y }
+}
+
+/** Undoes orient(point, n). */
+export function unorient({ x, y }, n) {
+    if (n & 1) { x = SIZE - 1 - x }
+    if (n & 2) { y = SIZE - 1 - y }
+    if (n & 4) { [x, y] = [y, x] }
+    return { x, y }
+}
+
+/** orient for an SGF coordinate; passes stay passes. */
+export function orientSgf(coord, n) {
+    const point = fromSgf(coord)
+    if (!point || !n) { return coord }
+    const { x, y } = orient(point, n)
+    return toSgf(x, y)
+}
+
 /** "q16" / "Q16" -> "pd", or null */
 export function displayToSgf(text) {
     const match = /^([a-hj-t])(\d{1,2})$/i.exec(text.trim())

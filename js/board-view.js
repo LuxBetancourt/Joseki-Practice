@@ -1,6 +1,6 @@
 // SVG rendering of the board plus pointer input. Knows nothing about joseki logic.
 
-import { SIZE, EMPTY, BLACK, columnLabel, rowLabel, colorName } from './go.js'
+import { SIZE, EMPTY, BLACK, columnLabel, rowLabel, colorName, orient, unorient } from './go.js'
 
 const NS = 'http://www.w3.org/2000/svg'
 const STAR_POINTS = [3, 9, 15].flatMap((x) => [3, 9, 15].map((y) => [x, y]))
@@ -52,7 +52,7 @@ export class BoardView {
     constructor(svg, handlers) {
         this.svg = svg
         this.handlers = handlers
-        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null, fadeStones: false, extraStones: [], badges: [], area: null }
+        this.state = { position: null, lastMove: null, highlights: [], marks: [], target: null, fadeStones: false, extraStones: [], badges: [], area: null, orientation: 0 }
         this.hoverPoint = null
 
         const size = SIZE - 1 + 2 * MARGIN
@@ -112,14 +112,19 @@ export class BoardView {
         const y = Math.round(p.y)
         if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) { return null }
         if (Math.hypot(p.x - x, p.y - y) > 0.55) { return null }
-        return { x, y }
+        return unorient({ x, y }, this.state.orientation)
+    }
+
+    /** Where the point (x, y) of the game is drawn, with the board turned (see state.orientation). */
+    toView(x, y) {
+        return orient({ x, y }, this.state.orientation)
     }
 
     /** With an area shown, a click anywhere on the grid is inside it or outside it. */
     clickArea(event) {
         const matrix = this.svg.getScreenCTM()
         if (!matrix) { return }
-        const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
+        const p = unorient(new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse()), this.state.orientation)
         const onGrid = (v) => v >= -0.5 && v <= SIZE - 0.5
         if (!onGrid(p.x) || !onGrid(p.y)) { return }
         const { x0, y0, x1, y1 } = this.state.area
@@ -151,8 +156,9 @@ export class BoardView {
         this.ghost.setAttribute('visibility', show ? 'visible' : 'hidden')
         this.svg.classList.toggle('clickable', Boolean(show))
         if (show) {
-            this.ghost.setAttribute('cx', point.x)
-            this.ghost.setAttribute('cy', point.y)
+            const at = this.toView(point.x, point.y)
+            this.ghost.setAttribute('cx', at.x)
+            this.ghost.setAttribute('cy', at.y)
             this.ghost.setAttribute('class', `stone ghost ${colorName(color)}`)
         }
     }
@@ -174,6 +180,8 @@ export class BoardView {
      *   area:       {x0, y0, x1, y1, inside?, outside?} | null; a dashed box with the board outside
      *               it darkened, clicked inside or outside (handlers.onArea); inside and outside
      *               are their tooltips
+     *   orientation: 0-7, the board turned and mirrored (see orient in go.js). Everything else
+     *               here is in the game's coordinates; only the drawing and clicks are turned
      */
     render(state) {
         Object.assign(this.state, state)
@@ -188,11 +196,12 @@ export class BoardView {
                 for (let x = 0; x < SIZE; ++x) {
                     const now = position.at(x, y)
                     const later = target.at(x, y)
+                    const v = this.toView(x, y)
                     if (later !== EMPTY && now === EMPTY) {
-                        stones.push(`<circle class="stone future ${later === BLACK ? 'black' : 'white'}" cx="${x}" cy="${y}" r="0.47"/>`)
+                        stones.push(`<circle class="stone future ${later === BLACK ? 'black' : 'white'}" cx="${v.x}" cy="${v.y}" r="0.47"/>`)
                     }
                     else if (now !== EMPTY && now !== later) { // Captured (and possibly retaken by the other color)
-                        removed.push({ x, y, on: now === BLACK ? 'on-black' : 'on-white' })
+                        removed.push({ ...v, on: now === BLACK ? 'on-black' : 'on-white' })
                     }
                 }
             }
@@ -201,19 +210,21 @@ export class BoardView {
             for (let x = 0; x < SIZE; ++x) {
                 const color = position.at(x, y)
                 if (color !== EMPTY) {
-                    stones.push(`<circle class="stone ${color === BLACK ? 'black' : 'white'}" cx="${x}" cy="${y}" r="0.47"/>`)
+                    const v = this.toView(x, y)
+                    stones.push(`<circle class="stone ${color === BLACK ? 'black' : 'white'}" cx="${v.x}" cy="${v.y}" r="0.47"/>`)
                 }
             }
         }
         const escape = (text) => String(text).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
         for (const { x, y, color, title } of extraStones) {
             if (position.at(x, y) !== EMPTY) { continue }
-            stones.push(`<circle class="stone extra ${color === BLACK ? 'black' : 'white'}" cx="${x}" cy="${y}" r="0.47">${title ? `<title>${escape(title)}</title>` : ''}</circle>`)
+            const v = this.toView(x, y)
+            stones.push(`<circle class="stone extra ${color === BLACK ? 'black' : 'white'}" cx="${v.x}" cy="${v.y}" r="0.47">${title ? `<title>${escape(title)}</title>` : ''}</circle>`)
         }
         const marked = (x, y) => marks.some((m) => m.x === x && m.y === y)
         if (lastMove && position.at(lastMove.x, lastMove.y) !== EMPTY && !marked(lastMove.x, lastMove.y)) {
-            const { x, y } = lastMove
-            const on = position.at(x, y) === BLACK ? 'on-black' : 'on-white'
+            const on = position.at(lastMove.x, lastMove.y) === BLACK ? 'on-black' : 'on-white'
+            const { x, y } = this.toView(lastMove.x, lastMove.y)
             stones.push(lastMove.style === 'cross'
                 ? `<path class="last-move-cross" d="M${x - 0.24} ${y - 0.24}L${x + 0.24} ${y + 0.24}M${x + 0.24} ${y - 0.24}L${x - 0.24} ${y + 0.24}"/>`
                 : `<circle class="last-move ${on}" cx="${x}" cy="${y}" r="0.2"/>`)
@@ -222,15 +233,17 @@ export class BoardView {
 
         this.highlightLayer.innerHTML = highlights
             .filter(({ x, y }) => position.at(x, y) === EMPTY)
+            .map(({ x, y, type }) => ({ ...this.toView(x, y), type }))
             .map(({ x, y, type }) => `<circle class="highlight ${type}" cx="${x}" cy="${y}" r="0.28"/>`)
             .join('')
 
         this.markLayer.innerHTML = marks.map(({ x, y, shape }) => {
             const on = { [EMPTY]: 'on-empty', [BLACK]: 'on-black' }[position.at(x, y)] || 'on-white'
-            return markShape(shape, x, y, `mark ${on}`)
+            const v = this.toView(x, y)
+            return markShape(shape, v.x, v.y, `mark ${on}`)
         }).concat(removed.map(({ x, y, on }) =>
             `<path class="removed ${on}" d="M${x - 0.22} ${y - 0.22}L${x + 0.22} ${y + 0.22}M${x + 0.22} ${y - 0.22}L${x - 0.22} ${y + 0.22}"/>`,
-        )).concat(badges.map(({ x, y, text, title }) =>
+        )).concat(badges.map(({ x, y, ...badge }) => ({ ...this.toView(x, y), ...badge })).map(({ x, y, text, title }) =>
             `<g class="badge">${title ? `<title>${escape(title)}</title>` : ''}<circle cx="${x + 0.33}" cy="${y - 0.33}" r="0.21"/><text x="${x + 0.33}" y="${y - 0.33}">${escape(text)}</text></g>`,
         )).join('')
 
@@ -247,7 +260,9 @@ export class BoardView {
         const escape = (text) => String(text ?? '').replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
         const box = (x0, y0, x1, y1) => `M${x0} ${y0}H${x1}V${y1}H${x0}Z`
         const edge = SIZE - 0.5
-        const inner = box(area.x0 - 0.5, area.y0 - 0.5, area.x1 + 0.5, area.y1 + 0.5)
+        const a = this.toView(area.x0 - 0.5, area.y0 - 0.5)
+        const b = this.toView(area.x1 + 0.5, area.y1 + 0.5)
+        const inner = box(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y))
         this.areaLayer.innerHTML = [
             // The board outside the box, as the whole grid with the box cut out of it
             `<path class="area-outside" fill-rule="evenodd" d="${box(-0.5, -0.5, edge, edge)}${inner}"><title>${escape(area.outside)}</title></path>`,

@@ -39,11 +39,19 @@ test('a problem type added since reaches players who saved settings before it, o
 test('version 2: Play both sides is switched on once for settings saved before it', () => {
     const before = loadSettings({ storage: saved({ shapeBothSides: false }) }) // Version 1 didn't save a version
     assert.equal(before.settings.shapeBothSides, true)
-    assert.equal(before.settings.version, 2)
+    assert.equal(before.settings.version, SETTINGS_VERSION)
     assert.equal(before.changed, true, 'so the app saves it straight away')
     const after = loadSettings({ storage: saved({ version: 2, shapeBothSides: false }) })
     assert.equal(after.settings.shapeBothSides, false, 'turning it off afterwards sticks')
+})
+
+test('version 3: Random becomes the Player, unless White was chosen', () => {
+    assert.equal(loadSettings({ storage: saved({ version: 2, player: 'black' }) }).settings.player, 'random')
+    assert.equal(loadSettings({ storage: saved({ version: 2, player: 'white' }) }).settings.player, 'white')
+    const after = loadSettings({ storage: saved({ version: 3, player: 'black' }) })
+    assert.equal(after.settings.player, 'black', 'choosing Black afterwards sticks')
     assert.equal(after.changed, false)
+    assert.equal(loadSettings({ storage: fakeStorage() }).settings.player, 'random', 'new players start on Random')
 })
 
 test('old mode names become the current ones', () => {

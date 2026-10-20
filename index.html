@@ -113,6 +113,7 @@
         <div class="segmented not-review" role="radiogroup" aria-label="Play as">
             <input type="radio" name="player" id="player-black" value="black"><label for="player-black">Black</label>
             <input type="radio" name="player" id="player-white" value="white"><label for="player-white">White</label>
+            <input type="radio" name="player" id="player-random" value="random"><label for="player-random" title="Black or White, picked at random for each problem">Random</label>
         </div>
 
         <h2 class="not-review">Starting Point</h2>
@@ -167,6 +168,7 @@
             <li><label><input type="checkbox" data-setting="showMoves"> Show joseki moves <kbd>H</kbd></label></li>
             <li><label><input type="checkbox" data-setting="showMoveInfo"> Show move info</label></li>
             <li class="not-explore" title="Start each problem from an empty board and play its moves out in order. Click the board to skip ahead."><label><input type="checkbox" data-setting="replaySetup"> Play out each problem’s moves</label></li>
+            <li class="not-explore" title="Turn each problem to one of the four corners, sometimes mirrored, so joseki aren't always in the top right. Takes effect from the next problem."><label><input type="checkbox" data-setting="randomCorners"> Random corners</label></li>
             <li title="Shows the final shape each joseki move leads to. Loads several lines from Josekipedia per position.">
                 <label><input type="checkbox" data-setting="showFollowUps"> Show follow-up variations</label>
             </li>
