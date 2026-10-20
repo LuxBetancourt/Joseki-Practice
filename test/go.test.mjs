@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { Position, IllegalMoveError, BLACK, WHITE, EMPTY, fromSgf, toSgf, sgfToDisplay, displayToSgf } from '../js/go.js'
+import { Position, IllegalMoveError, BLACK, WHITE, EMPTY, fromSgf, toSgf, sgfToDisplay, displayToSgf, orient, unorient, orientSgf } from '../js/go.js'
 
 /** Plays a sequence of SGF moves ("tt" = pass), alternating colors from black. */
 const play = (moves, position = new Position()) =>
@@ -103,4 +103,16 @@ test('sameStones compares stones regardless of move order or turn', () => {
     assert.ok(a.sameStones(b))
     assert.ok(!a.sameStones(play('pd dd pq')))
     assert.ok(a.sameStones(a.pass()))
+})
+
+test('the 8 orientations: each takes the top-right corner to a different corner or mirror, and undoes cleanly', () => {
+    const corners = new Set()
+    for (let n = 0; n < 8; ++n) {
+        assert.deepEqual(unorient(orient({ x: 16, y: 3 }, n), n), { x: 16, y: 3 })
+        assert.deepEqual(unorient(orient({ x: 2.5, y: -0.5 }, n), n), { x: 2.5, y: -0.5 }, 'fractional points too')
+        corners.add(orientSgf('qd', n))
+    }
+    assert.equal(corners.size, 8, 'Q16 lands somewhere different each time')
+    assert.equal(orientSgf('pd', 0), 'pd')
+    assert.equal(orientSgf('tt', 5), 'tt', 'a pass stays a pass')
 })
